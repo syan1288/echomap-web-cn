@@ -220,7 +220,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
 
   return (
     <aside
-      className={`relative flex h-[100dvh] max-h-[100dvh] min-h-0 w-full shrink-0 flex-col items-center overflow-hidden overscroll-none text-center px-5 pt-[2.5vh] pb-[2.5vh] md:sticky md:top-0 md:z-30 md:min-h-[100dvh] md:shrink-0 md:grow-0 md:self-start transition-[max-width,min-width,basis,padding] duration-500 ease-out ${
+      className={`relative flex h-[100dvh] max-h-[100dvh] min-h-0 w-full shrink-0 flex-col items-center overflow-x-hidden overflow-y-auto overscroll-none text-center px-5 pt-[2.5vh] pb-[2.5vh] md:sticky md:top-0 md:z-30 md:min-h-[100dvh] md:shrink-0 md:grow-0 md:self-start transition-[max-width,min-width,basis,padding] duration-500 ease-out ${
         collapsed
           ? 'md:min-w-[88px] md:max-w-[88px] md:basis-[88px] md:px-2'
           : 'md:min-w-[280px] md:max-w-[440px] md:basis-[30%]'
@@ -388,7 +388,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
             </button>
           </nav>
 
-          <div className="relative z-[1] flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-start overflow-hidden">
+          <div className="relative z-[1] flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-start overflow-visible">
             <h1
               className="m-0 mb-[4vh] shrink-0 w-[84%] max-w-none text-center text-[clamp(2.35rem,4.2vw,3.85rem)]"
               style={{
@@ -428,12 +428,15 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                   {galleryStatsSlot}
                 </div>
               )}
-              {footerSlot ? (
-                <div className="mt-auto w-full shrink-0 border-t border-black/10 pt-3">{footerSlot}</div>
-              ) : null}
             </div>
           </div>
         </>
+      )}
+
+      {footerSlot && !collapsed && !user && (
+        <div className="absolute left-5 right-5 bottom-5 z-[5] border-t border-black/10 pt-3">
+          {footerSlot}
+        </div>
       )}
 
       {user && !collapsed && (
