@@ -3,100 +3,81 @@ import { useLocalization } from '../context/LocalizationContext';
 import { useAuth } from '../context/AuthContext';
 
 export interface AuthPanelProps {
-  /** 从 Supabase 拉取建筑并替换当前地图（有确认框） */
   onPullFromCloud?: () => void | Promise<void>;
-  /** 把当前地图上已生成的建筑全部上传/更新到云端 */
   onPushAllToCloud?: () => void | Promise<void>;
   cloudBusy?: boolean;
 }
 
-/**
- * 侧栏底部：云端账号（邮箱）。未配置 VITE_SUPABASE_* 时显示提示，不阻断本地使用。
- */
-export const AuthPanel: React.FC<AuthPanelProps> = ({
-  onPullFromCloud,
-  onPushAllToCloud,
-  cloudBusy = false,
-}) => {
+const BRAND_BLUE = '#0053D4';
+const ICON_STROKE = 1.5;
+
+function GlassInput({
+  type,
+  value,
+  onChange,
+  placeholder,
+  leftIcon,
+  onSubmit,
+}: {
+  type: 'email' | 'password';
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  leftIcon: React.ReactNode;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="w-full h-11 rounded-full border border-white/70 bg-white/55 backdrop-blur-md flex items-center gap-2 px-3"
+      style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)' }}
+    >
+      <span className="shrink-0 text-black">{leftIcon}</span>
+      <input
+        type={type}
+        autoComplete={type === 'email' ? 'email' : 'current-password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-[#1d1d1d] outline-none"
+        style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onSubmit();
+        }}
+      />
+      {type === 'password' && (
+        <button
+          type="button"
+          onClick={onSubmit}
+          className="h-7 w-7 rounded-full border-0 bg-transparent flex items-center justify-center cursor-pointer hover:bg-black/5"
+          aria-label="submit auth"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+export const AuthPanel: React.FC<AuthPanelProps> = () => {
   const { t } = useLocalization();
-  const { configured, loading, user, signInWithEmail, signUpWithEmail, signOut } = useAuth();
+  const { configured, loading, user, signInWithEmail, signUpWithEmail } = useAuth();
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
+  const [expanded, setExpanded] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+  const [registerConfirmShown, setRegisterConfirmShown] = useState(false);
 
-  if (!configured) {
-    return (
-      <p
-        className="m-0 text-center text-[11px] leading-snug opacity-80 px-1"
-        style={{ color: '#332115', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
-      >
-        {t('authDisabledHint')}
-      </p>
-    );
-  }
-
-  if (loading) {
-    return (
-      <p className="m-0 text-center text-[12px]" style={{ color: '#332115' }}>
-        {t('authLoading')}
-      </p>
-    );
-  }
-
-  if (user) {
-    return (
-      <div className="flex flex-col gap-2 items-stretch text-left w-full px-1">
-        <p
-          className="m-0 text-[11px] truncate opacity-90"
-          style={{ color: '#332115', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
-          title={user.email ?? ''}
-        >
-          {t('authSignedInAs')}
-          <br />
-          <span className="font-medium">{user.email}</span>
-        </p>
-        {(onPullFromCloud || onPushAllToCloud) && (
-          <div className="flex flex-col gap-1.5">
-            {onPullFromCloud && (
-              <button
-                type="button"
-                disabled={cloudBusy}
-                onClick={() => void onPullFromCloud()}
-                className="rounded-lg border border-black/20 bg-white/90 py-1.5 text-[11px] text-[#332115] hover:bg-white cursor-pointer disabled:opacity-50"
-                style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
-              >
-                {t('cloudPull')}
-              </button>
-            )}
-            {onPushAllToCloud && (
-              <button
-                type="button"
-                disabled={cloudBusy}
-                onClick={() => void onPushAllToCloud()}
-                className="rounded-lg border border-black/20 bg-white/90 py-1.5 text-[11px] text-[#332115] hover:bg-white cursor-pointer disabled:opacity-50"
-                style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
-              >
-                {t('cloudPushAll')}
-              </button>
-            )}
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          className="rounded-lg border border-black/20 bg-white/90 py-1.5 text-[12px] text-[#332115] hover:bg-white cursor-pointer"
-          style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
-        >
-          {t('authSignOut')}
-        </button>
-      </div>
-    );
-  }
+  if (!configured) return null;
+  if (loading) return null;
+  if (user) return null;
 
   const submit = async () => {
     setHint(null);
+    if (mode === 'signIn') setRegisterConfirmShown(false);
     setBusy(true);
     try {
       const fn = mode === 'signIn' ? signInWithEmail : signUpWithEmail;
@@ -106,8 +87,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
         return;
       }
       if (mode === 'signUp') {
-        setHint(t('authCheckEmail'));
-        setPassword('');
+        setRegisterConfirmShown(true);
       }
     } finally {
       setBusy(false);
@@ -115,78 +95,116 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-2 items-stretch w-full px-1">
-      <div className="flex gap-1 rounded-lg bg-black/10 p-0.5">
+    <div className="flex flex-col items-center gap-3 w-full">
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => {
             setMode('signIn');
             setHint(null);
+            setRegisterConfirmShown(false);
+            setExpanded(true);
           }}
-          className={`flex-1 rounded-md py-1 text-[11px] cursor-pointer border-0 ${
-            mode === 'signIn' ? 'bg-white shadow-sm' : 'bg-transparent'
-          }`}
-          style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif', color: '#332115' }}
+          className="h-11 w-11 rounded-full border border-white/65 flex items-center justify-center cursor-pointer transition-colors"
+          style={{
+            background: mode === 'signIn' ? BRAND_BLUE : 'rgba(255,255,255,0.75)',
+            color: mode === 'signIn' ? '#fff' : '#111',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)',
+          }}
+          aria-label={t('authSignIn')}
         >
-          {t('authSignIn')}
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14" />
+            <path d="m13 6 6 6-6 6" />
+          </svg>
         </button>
         <button
           type="button"
           onClick={() => {
             setMode('signUp');
             setHint(null);
+            setRegisterConfirmShown(false);
+            setExpanded(true);
           }}
-          className={`flex-1 rounded-md py-1 text-[11px] cursor-pointer border-0 ${
-            mode === 'signUp' ? 'bg-white shadow-sm' : 'bg-transparent'
-          }`}
-          style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif', color: '#332115' }}
+          className="h-11 w-11 rounded-full border border-white/65 flex items-center justify-center cursor-pointer transition-colors"
+          style={{
+            background: mode === 'signUp' ? BRAND_BLUE : 'rgba(255,255,255,0.75)',
+            color: mode === 'signUp' ? '#fff' : '#111',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)',
+          }}
+          aria-label={t('authSignUp')}
         >
-          {t('authSignUp')}
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+            <path d="m4 20 4.5-1 9-9a2 2 0 0 0-2.8-2.8l-9 9L4 20Z" />
+            <path d="M14 6l4 4" />
+          </svg>
         </button>
       </div>
-      <label className="sr-only" htmlFor="auth-email">
-        Email
-      </label>
-      <input
-        id="auth-email"
-        type="email"
-        autoComplete="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder={t('authEmailPlaceholder')}
-        className="w-full rounded-md border border-black/20 bg-white/95 px-2 py-1.5 text-[12px] text-[#332115] box-border"
-        style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
-      />
-      <label className="sr-only" htmlFor="auth-password">
-        Password
-      </label>
-      <input
-        id="auth-password"
-        type="password"
-        autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder={t('authPasswordPlaceholder')}
-        className="w-full rounded-md border border-black/20 bg-white/95 px-2 py-1.5 text-[12px] text-[#332115] box-border"
-        style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void submit();
-        }}
-      />
+
+      {expanded && (
+        <>
+          <GlassInput
+            type="email"
+            value={email}
+            onChange={setEmail}
+            placeholder={t('authEmailPlaceholder')}
+            onSubmit={submit}
+            leftIcon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="6" width="18" height="12" rx="2" />
+                <path d="m4 8 8 6 8-6" />
+              </svg>
+            }
+          />
+          <GlassInput
+            type="password"
+            value={password}
+            onChange={setPassword}
+            placeholder={t('authPasswordPlaceholder')}
+            onSubmit={submit}
+            leftIcon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="10" cy="11" r="4" />
+                <path d="m13 14 7 7" />
+              </svg>
+            }
+          />
+        </>
+      )}
+
       {hint && (
-        <p className="m-0 text-[11px] leading-snug text-[#5c4033]" style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}>
+        <p
+          className="m-0 text-[12px] text-center"
+          style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
+        >
           {hint}
         </p>
       )}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void submit()}
-        className="rounded-lg border-0 py-2 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
-        style={{ background: '#0053D4', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
-      >
-        {busy ? '…' : mode === 'signIn' ? t('authSubmitSignIn') : t('authSubmitSignUp')}
-      </button>
+      {expanded && (
+        <div className="h-[20px] flex items-center justify-center">
+          {mode === 'signIn' ? (
+            <button
+              type="button"
+              className="border-0 bg-transparent text-[12px] cursor-pointer"
+              style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
+            >
+              Forget password
+            </button>
+          ) : (
+            <span
+              className="text-[12px]"
+              style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
+            >
+              {registerConfirmShown ? 'confirm your email to check' : ''}
+            </span>
+          )}
+        </div>
+      )}
+      {busy && (
+        <p className="m-0 text-[11px]" style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace' }}>
+          ...
+        </p>
+      )}
     </div>
   );
 };

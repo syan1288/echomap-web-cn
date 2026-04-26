@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import type { ProcessedImage } from '../App';
 import { filterBuildings, suggestLabels, type GalleryDim } from '../utils/galleryFilter';
 import { galleryBuildingTitle } from '../utils/buildingLabel';
@@ -16,6 +16,12 @@ const THUMB_FRAME =
   'relative mx-auto flex aspect-square w-full max-w-[min(100%,200px)] shrink-0 items-center justify-center overflow-hidden sm:max-w-[min(100%,220px)] md:max-w-[min(100%,240px)]';
 const thumbBoxClass =
   'flex w-full shrink-0 items-center justify-center overflow-hidden py-1 min-h-0';
+const THUMB_CONTENT_TARGET = 0.78;
+const GALLERY_SEARCH_BORDER_PX = 1.5;
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 function mapAlignedBuildingSrc(b: ProcessedImage): string | null {
   return (
@@ -23,6 +29,30 @@ function mapAlignedBuildingSrc(b: ProcessedImage): string | null {
     (!b.isGenerating && b.photos[0]?.url ? b.photos[0].url : null) ??
     null
   );
+}
+
+function getGalleryThumbImageStyle(b: ProcessedImage): React.CSSProperties | undefined {
+  const iw = Math.max(1, Number(b.width) || 0);
+  const ih = Math.max(1, Number(b.height) || 0);
+  const raw = b.contentBounds;
+  if (!raw || iw <= 0 || ih <= 0) return undefined;
+
+  const x = clampNumber(Number(raw.x) || 0, 0, iw);
+  const y = clampNumber(Number(raw.y) || 0, 0, ih);
+  const w = clampNumber(Number(raw.width) || iw, 1, iw - x || 1);
+  const h = clampNumber(Number(raw.height) || ih, 1, ih - y || 1);
+
+  const contentOccupancy = Math.max(w / iw, h / ih);
+  // contentBounds 异常时回退默认展示，避免出现裁切/巨幅放大
+  if (contentOccupancy < 0.16 || contentOccupancy > 0.98) return undefined;
+
+  // 仅做温和统一，不进行激进放大和偏移
+  const scale = clampNumber(THUMB_CONTENT_TARGET / Math.max(contentOccupancy, 0.01), 0.92, 1.35);
+
+  return {
+    transform: `scale(${scale.toFixed(3)})`,
+    transformOrigin: 'center center',
+  };
 }
 
 const FILTER_RECENT_KEY = 'echo_gallery_filter_recent';
@@ -49,6 +79,7 @@ function writeFilterRecent(q: string) {
 export interface GallerySectionProps {
   buildings: ProcessedImage[];
   onOpenBuilding: (id: number) => void;
+  onSwipeToHome?: () => void;
 }
 
 const DIM_LABELS: { id: GalleryDim; label: string }[] = [
@@ -58,7 +89,7 @@ const DIM_LABELS: { id: GalleryDim; label: string }[] = [
   { id: 'continent', label: 'Continent' },
 ];
 
-export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpenBuilding }) => {
+export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpenBuilding, onSwipeToHome }) => {
   const [query, setQuery] = useState('');
   const [dim, setDim] = useState<GalleryDim>('all');
   const [openDim, setOpenDim] = useState(false);
@@ -70,6 +101,8 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
     moon: string;
     avatarVariant: number;
   }>({ el: null, moon: '', avatarVariant: 0 });
+  const gridRef = useRef<HTMLDivElement>(null);
+  const touchStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (activeInput && query.length <= 1) setRecent(readFilterRecent());
@@ -114,7 +147,14 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                   <button
                     type="button"
                     className="border border-black bg-white flex items-center justify-center text-xs shrink-0 rounded-none border-r-0"
-                    style={{ color: '#332115', width: 44, height: 44, fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
+                    style={{
+                      color: '#332115',
+                      width: 44,
+                      height: 44,
+                      borderWidth: GALLERY_SEARCH_BORDER_PX,
+                      borderRightWidth: 0,
+                      fontFamily: '"Roboto Mono", ui-monospace, monospace',
+                    }}
                     aria-haspopup="listbox"
                     aria-expanded={openDim}
                     onClick={() => setOpenDim((v) => !v)}
@@ -125,7 +165,11 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                     <ul
                       className="scrollbar-hide absolute left-0 mt-0 w-44 bg-white border border-black z-30 text-left text-sm shadow-none max-h-[200px] overflow-y-auto rounded-none"
                       role="listbox"
-                      style={{ color: '#332115', fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
+                      style={{
+                        color: '#332115',
+                        borderWidth: GALLERY_SEARCH_BORDER_PX,
+                        fontFamily: '"Roboto Mono", ui-monospace, monospace',
+                      }}
                     >
                       {DIM_LABELS.map((d) => (
                         <li key={d.id}>
@@ -149,6 +193,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                   style={{
                     color: '#332115',
                     height: 44,
+                    borderWidth: GALLERY_SEARCH_BORDER_PX,
                     fontFamily: '"Roboto Mono", ui-monospace, monospace',
                   }}
                   placeholder="Filter…"
@@ -163,7 +208,11 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
               {activeInput && dropdownRows.length > 0 && (
                 <ul
                   className="scrollbar-hide absolute left-0 right-0 top-full mt-0 bg-white border border-black border-t-0 z-20 max-h-[200px] overflow-y-auto rounded-none"
-                  style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
+                  style={{
+                    borderWidth: GALLERY_SEARCH_BORDER_PX,
+                    borderTopWidth: 0,
+                    fontFamily: '"Roboto Mono", ui-monospace, monospace',
+                  }}
                 >
                   {dropdownRows.map((row) => (
                     <li
@@ -183,10 +232,41 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
             </div>
           </div>
 
-          <div className="scrollbar-hide grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-4 md:gap-x-3 md:gap-y-5 flex-1 content-start min-h-0 overflow-y-auto overscroll-contain scroll-pt-2 pt-3 sm:pt-4 [grid-auto-rows:minmax(0,auto)] justify-items-center">
+          <div
+            ref={gridRef}
+            className="scrollbar-hide grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-4 md:gap-x-3 md:gap-y-5 flex-1 content-start min-h-0 overflow-y-auto overscroll-contain scroll-pt-2 pt-3 sm:pt-4 [grid-auto-rows:minmax(0,auto)] justify-items-center"
+            onWheel={(e) => {
+              if (!onSwipeToHome) return;
+              if (e.deltaY >= -36) return;
+              const el = gridRef.current;
+              if (!el) return;
+              const atTop = el.scrollTop <= 2;
+              if (!atTop) return;
+              e.preventDefault();
+              onSwipeToHome();
+            }}
+            onTouchStart={(e) => {
+              touchStartYRef.current = e.touches[0]?.clientY ?? null;
+            }}
+            onTouchEnd={(e) => {
+              if (!onSwipeToHome) return;
+              const start = touchStartYRef.current;
+              const end = e.changedTouches[0]?.clientY ?? null;
+              touchStartYRef.current = null;
+              if (start == null || end == null) return;
+              const dy = end - start;
+              if (dy >= -46) return;
+              const el = gridRef.current;
+              if (!el) return;
+              const atTop = el.scrollTop <= 2;
+              if (!atTop) return;
+              onSwipeToHome();
+            }}
+          >
             {pageSlice.map((b) => {
               const title = galleryBuildingTitle(b.log);
               const displaySrc = mapAlignedBuildingSrc(b);
+              const thumbImageStyle = getGalleryThumbImageStyle(b);
               const moon = (b.log.moon ?? '').trim();
               const moonOk = moon.length >= 1 && moon.length <= 64;
               const av = normalizeAvatarVariant(b.log.avatarVariant);
@@ -221,6 +301,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                               alt=""
                               draggable={false}
                               className="h-full w-full select-none object-contain object-center"
+                              style={thumbImageStyle}
                             />
                           ) : (
                             <span className="text-xs text-[#332115]/70">Generating…</span>

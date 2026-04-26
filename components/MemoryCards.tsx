@@ -6,12 +6,12 @@ import { useLocalization } from '../context/LocalizationContext';
 interface MemoryCardsProps {
     selectedImage: ProcessedImage;
     map: any;
+    mapViewportTick?: number;
     onUnlock: () => void;
     onViewPhoto: (photoIndex: number) => void;
-    onAddPhoto: () => void;
-    onLiveCapture: () => void;
+    onOpenPhotoModal: () => void;
+    onOpenAudioModal: () => void;
     onEditLog: () => void;
-    onDeletePhoto: (memoryId: number, photoIndex: number) => void;
 }
 
 const Card: React.FC<{
@@ -33,17 +33,11 @@ const Card: React.FC<{
 };
 
 const PhotoCard: React.FC<{
-    photo: PhotoData;
+    photo: PhotoData | null;
     onClick: () => void;
-    onDelete: () => void;
     rotation: number;
-}> = ({ photo, onClick, onDelete, rotation }) => {
+}> = ({ photo, onClick, rotation }) => {
     const { t } = useLocalization();
-    
-    const handleDeleteClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onDelete();
-    };
 
     return (
         <button
@@ -52,14 +46,17 @@ const PhotoCard: React.FC<{
             style={{ transform: `rotate(${rotation}deg) scale(1)`}}
             aria-label={t('cardsViewPhoto')}
         >
-            <img src={photo.url} alt={t('cardsPhotoThumbnailAlt')} className="w-full h-full object-cover" />
-             <div 
-                onClick={handleDeleteClick}
-                className="absolute top-0 right-0 w-5 h-5 bg-black/60 text-white flex items-center justify-center text-sm opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-red-500"
-                aria-label={t('cardsDeletePhoto')}
-            >
-                &times;
-            </div>
+            {photo ? (
+              <img src={photo.url} alt={t('cardsPhotoThumbnailAlt')} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-[#5a5a5a]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                  <circle cx="8.5" cy="10.5" r="1.5"></circle>
+                  <path d="m21 15-5-5L5 21"></path>
+                </svg>
+              </div>
+            )}
         </button>
     );
 };
@@ -68,12 +65,12 @@ const PhotoCard: React.FC<{
 export const MemoryCards: React.FC<MemoryCardsProps> = ({
     selectedImage,
     map,
+    mapViewportTick = 0,
     onUnlock,
     onViewPhoto,
-    onAddPhoto,
-    onLiveCapture,
+    onOpenPhotoModal,
+    onOpenAudioModal,
     onEditLog,
-    onDeletePhoto,
 }) => {
     const { t } = useLocalization();
     const cardsRef = useRef<HTMLDivElement>(null);
@@ -94,15 +91,10 @@ export const MemoryCards: React.FC<MemoryCardsProps> = ({
             left: screenPoint.x,
         });
 
-    }, [selectedImage.lat, selectedImage.lng, selectedImage.height, map]);
+    }, [selectedImage.lat, selectedImage.lng, selectedImage.height, map, mapViewportTick]);
 
-    const allPhotos = selectedImage.photos || [];
-    /** 超过 2 张时只展示最近上传的 2 张缩略图（数组末尾为最新） */
-    const maxPhotoSlots = 2;
-    const photoStart =
-      allPhotos.length > maxPhotoSlots ? allPhotos.length - maxPhotoSlots : 0;
-    const photoCards = allPhotos.slice(photoStart);
-    const totalCards = 1 + 1 + photoCards.length + 1; // Log, Live capture, Photos, Add
+    const latestPhoto = selectedImage.photos?.[selectedImage.photos.length - 1] ?? null;
+    const totalCards = 4; // Diary, Camera, Photo slot, Audio
     const angleSpread = Math.min(totalCards * 12, 90);
     const angleStep = totalCards > 1 ? angleSpread / (totalCards - 1) : 0;
     const startAngle = -angleSpread / 2;
@@ -111,33 +103,40 @@ export const MemoryCards: React.FC<MemoryCardsProps> = ({
         <Card key="log" onClick={onEditLog} rotation={startAngle} ariaLabel={t('cardsEditLog')}>
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
         </Card>,
-        <Card key="live" onClick={onLiveCapture} rotation={startAngle + angleStep} ariaLabel="Live capture">
+        <Card key="live" onClick={onOpenPhotoModal} rotation={startAngle + angleStep} ariaLabel="Open photo modal">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
                 <circle cx="12" cy="13" r="3" />
             </svg>
         </Card>,
-        ...photoCards.map((photo, slotIdx) => {
-          const indexInFull = photoStart + slotIdx;
-          return (
-            <PhotoCard
-              key={photo.photo_id ?? `photo-${indexInFull}`}
-              photo={photo}
-              onClick={() => onViewPhoto(indexInFull)}
-              onDelete={() => onDeletePhoto(selectedImage.id, indexInFull)}
-              rotation={startAngle + angleStep * (slotIdx + 2)}
-            />
-          );
-        }),
-        <Card key="add" onClick={onAddPhoto} rotation={startAngle + angleStep * (photoCards.length + 2)} ariaLabel={t('cardsAddPhoto')}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-        </Card>
+        <PhotoCard
+          key={latestPhoto?.photo_id ?? 'photo-slot'}
+          photo={latestPhoto}
+          onClick={() => {
+            if (selectedImage.photos.length > 0) {
+              onViewPhoto(selectedImage.photos.length - 1);
+              return;
+            }
+            onOpenPhotoModal();
+          }}
+          rotation={startAngle + angleStep * 2}
+        />,
+        <Card key="audio" onClick={onOpenAudioModal} rotation={startAngle + angleStep * 3} ariaLabel="Open audio modal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 15V9" />
+              <path d="M8 18V6" />
+              <path d="M12 20V4" />
+              <path d="M16 18V6" />
+              <path d="M20 15V9" />
+            </svg>
+        </Card>,
     ];
 
     return (
         <div 
             ref={cardsRef}
             className="absolute"
+            data-selection-overlay="memory-cards"
             style={{
                 top: `${position.top}px`,
                 left: `${position.left}px`,

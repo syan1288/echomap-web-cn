@@ -4,6 +4,7 @@ import type { ProcessedImage } from '../App';
 interface ImageMarkerProps {
     img: ProcessedImage;
     map: any;
+    mapViewportTick?: number;
     isSelected: boolean;
     isDragging: boolean;
     animationTick: number;
@@ -18,6 +19,7 @@ interface ImageMarkerProps {
 const ImageMarkerComponent: React.FC<ImageMarkerProps> = ({
     img,
     map,
+    mapViewportTick: _mapViewportTick = 0,
     isSelected,
     isDragging,
     animationTick,

@@ -4,6 +4,9 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { LocalizationProvider } from './context/LocalizationContext';
 import { AuthProvider } from './context/AuthContext';
+import { registerServiceWorker } from './lib/registerServiceWorker';
+
+registerServiceWorker();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

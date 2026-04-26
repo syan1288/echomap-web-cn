@@ -16,33 +16,38 @@ import { useLocalization } from './context/LocalizationContext';
 import { SearchControl } from './components/SearchControl';
 import { ClusterBubble, Cluster } from './components/ClusterBubble';
 import { EchoSidebar } from './components/EchoSidebar';
+import { BuildingConnectionsOverlay } from './components/BuildingConnectionsOverlay';
 import Shuffle from './components/Shuffle';
 import { AddBuildingModal } from './components/AddBuildingModal';
 import { GallerySection } from './components/GallerySection';
 import { continentKeyFromLatLng } from './utils/geoStats';
 import { buildGeocodeQueries, hasGeographicHint } from './utils/geoFromBuildingName';
 import { GalleryDetailModals } from './components/GalleryDetailModals';
+import { MemoryPhotoModal } from './components/MemoryPhotoModal';
+import { MemoryAudioModal } from './components/MemoryAudioModal';
 import { AuthPanel } from './components/AuthPanel';
 import { resolveSessionAnchor, formatCityCountry } from './services/sessionGeo';
 import { normalizeLog } from './utils/normalizeLog';
 import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from './prompts/buildingStyle';
-import type { LogData, PhotoData, ProcessedImage } from './types/memory';
+import type { AudioEntry, LogData, PhotoData, ProcessedImage } from './types/memory';
 import { useAuth } from './context/AuthContext';
 import {
   loadAllCloudBuildings,
-  saveBuildingToCloud,
   deleteBuildingFromCloud,
   isSupabaseConfigured,
 } from './services/cloudBuildings';
 import { apiUrl } from './lib/apiBase';
+import { buildReverseGeocodeUrl, deploymentConfig } from './lib/deploymentConfig';
+import { parseReverseGeocodePlace } from './lib/locationAdapters';
+import { BASEMAP_THEME_OPTIONS, type BasemapThemeId, MapboxAdapter, createMapBounds } from './lib/mapboxAdapter';
+import { loadMapbox } from './lib/mapboxLoader';
 
-export type { LogData, PhotoData, ProcessedImage } from './types/memory';
+export type { AudioEntry, LogData, PhotoData, ProcessedImage } from './types/memory';
 
 /** 侧栏地理文案：Roboto 作为 Google Sans 的可加载替代 */
 const FONT_GOOGLE_SANS = '"Roboto", "Google Sans", system-ui, sans-serif';
 
 // --- TYPE DECLARATIONS for global libraries ---
-declare const L: any;
 declare const EXIF: any;
 
 // --- SOUND DEFINITIONS ---
@@ -71,15 +76,17 @@ const EDIT_PROMPT_TEMPLATE = (input: string) => `${input}. ${PROMPT_STYLE_GUIDAN
 
 const IMAGE_WIDTH = 120; 
 
-const COLOR_DISTANCE_THRESHOLD = 20;
+const COLOR_DISTANCE_THRESHOLD = 32;
 const MOVE_AMOUNT = 0.001; // Lat/Lng move amount for keyboard
 const CLUSTER_ZOOM_THRESHOLD = 6;
 const CLUSTER_RADIUS_PX = 90;
 /** 小于等于该 zoom 时地图仅显示黑色 POI 圆点，不显示建筑立绘 */
 const POI_DOT_ZOOM_THRESHOLD = 5;
+const MAP_ICON_BORDER_PX = 1.5;
+type ImageProvider = 'gemini' | 'jimeng' | 'gpt-image-2';
 
 /** Demo landmarks (locked). Set to false to start with an empty map. */
-const ECHO_SEED_DEMO_BUILDINGS = true;
+const ECHO_SEED_DEMO_BUILDINGS = false;
 
 /** 空状态文案在可被滚轮/拖拽/地图点击等「被动」清除前，最短展示时长（ms） */
 const EMPTY_HINT_PASSIVE_MS = 18_000;
@@ -140,29 +147,11 @@ const getExifData = (file: File): Promise<{ lat: number; lng: number; date: stri
 
 const reverseGeocode = async (lat: number, lng: number, lang: 'en' | 'zh'): Promise<string> => {
     try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=${lang}&zoom=18`);
+        const response = await fetch(buildReverseGeocodeUrl(lat, lng, lang, 18));
         if (!response.ok) return "An interesting place";
 
         const data = await response.json();
-        const { address } = data;
-
-        if (!address) {
-            return data.display_name || "A wonderful location";
-        }
-
-        const poi = address.tourism || address.amenity || address.shop || address.historic || address.public_building || data.name;
-        const city = address.city || address.town || address.village;
-        const country = address.country;
-        
-        if (poi && city) {
-            return `${poi}, ${city}`;
-        }
-        
-        if (city && country) {
-            return `${city}, ${country}`;
-        }
-        
-        return data.display_name || "A wonderful location";
+        return parseReverseGeocodePlace(data) || "A wonderful location";
 
     } catch (error) {
         console.error("Reverse geocoding failed", error);
@@ -204,7 +193,7 @@ const processImageForTransparency = (imageUrl: string): Promise<ImageProcessingR
         const visited = new Uint8Array(canvas.width * canvas.height);
         const queue: number[] = [];
 
-        const nearWhite = (r: number, g: number, b: number) => r >= 238 && g >= 238 && b >= 238;
+        const nearWhite = (r: number, g: number, b: number) => r >= 244 && g >= 244 && b >= 244;
         const nearBackground = (r: number, g: number, b: number) =>
           (r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2 < thresholdSquared || nearWhite(r, g, b);
 
@@ -329,13 +318,27 @@ const base64ToFile = async (base64: string, filename: string): Promise<File> => 
     return new File([blob], filename, { type: blob.type });
 };
 
+const makeAudioEntryFromFile = (
+  file: File,
+  kind: 'audio' | 'music',
+  source: AudioEntry['source'] = 'upload',
+  title?: string
+): AudioEntry => ({
+  id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${kind}-${Date.now()}`,
+  kind,
+  title: title || file.name,
+  url: URL.createObjectURL(file),
+  createdAt: new Date().toISOString(),
+  source,
+  file,
+});
+
 
 const App: React.FC = () => {
   const { t, language, toggleLanguage } = useLocalization();
   const { user } = useAuth();
   const [images, setImages] = useState<ProcessedImage[]>([]);
-  const [cloudBusy, setCloudBusy] = useState(false);
-  const prevCloudSnapRef = useRef<ProcessedImage[] | null>(null);
+  const autoLoadedUidRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [draggingImage, setDraggingImage] = useState<{ id: number; startX: number; startY: number; startLat: number; startLng: number } | null>(null);
@@ -357,7 +360,9 @@ const App: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [photoPreviewState, setPhotoPreviewState] = useState<PhotoPreviewState | null>(null);
   const [showLogModal, setShowLogModal] = useState(false);
-  const memoryToAddPhotoTo = useRef<number | null>(null);
+  const [showMemoryPhotoModal, setShowMemoryPhotoModal] = useState(false);
+  const [showMemoryAudioModal, setShowMemoryAudioModal] = useState(false);
+  const [imageProvider, setImageProvider] = useState<ImageProvider>('gemini');
   const [isLoading, setIsLoading] = useState<{ active: boolean; message: string } | null>(null);
 
   const [echoTab, setEchoTab] = useState<'home' | 'gallery'>('home');
@@ -366,8 +371,6 @@ const App: React.FC = () => {
   const [galleryDetailId, setGalleryDetailId] = useState<number | null>(null);
   const [galleryOpenM03, setGalleryOpenM03] = useState(false);
   const [galleryOpenM04, setGalleryOpenM04] = useState(false);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const memoryCaptureInputRef = useRef<HTMLInputElement>(null);
   const sessionAnchorRef = useRef<{ lat: number; lng: number } | null>(null);
   const seedDoneRef = useRef(false);
   /** 空状态文案展示期间，与 EMPTY_HINT_PASSIVE_MS 对齐的解锁时间戳 */
@@ -375,11 +378,15 @@ const App: React.FC = () => {
   const passiveDismissUnlockAtRef = useRef(0);
 
   const mapRef = useRef<any | null>(null);
-  const tileLayerRef = useRef<any | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  const homeTransitionTouchStartYRef = useRef<number | null>(null);
   const [statsFade, setStatsFade] = useState(0.48);
   const [mapState, setMapState] = useState({ isReady: false });
+  const [mapViewportTick, setMapViewportTick] = useState(0);
+  const [mapZoom, setMapZoom] = useState(2);
+  const [basemapTheme, setBasemapTheme] = useState<BasemapThemeId>('mist');
+  const [showBasemapMenu, setShowBasemapMenu] = useState(false);
   /** 仅开发：检测 Vite 中间件 /api 是否可达与生成凭证 */
   const [devEchoApiHint, setDevEchoApiHint] = useState<string | null>(null);
 
@@ -423,7 +430,7 @@ const App: React.FC = () => {
         return images;
     }
 
-    const zoom = mapRef.current.getZoom();
+    const zoom = mapZoom;
     if (zoom <= POI_DOT_ZOOM_THRESHOLD) {
       return images;
     }
@@ -480,68 +487,66 @@ const App: React.FC = () => {
     const unclusteredImages = images.filter(img => !clusteredImageIds.has(img.id));
 
     return [...clusters, ...unclusteredImages];
-  }, [images, mapState]);
+  }, [images, mapState.isReady, mapZoom]);
   
   // --- MAP INITIALIZATION ---
   useEffect(() => {
-    if (mapContainerRef.current && !mapRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        center: [15, 0],
-        zoom: 2,
-        minZoom: 1,
-        maxZoom: 18,
-        worldCopyJump: true,
-        zoomControl: false,
-      });
-      
-      const updateMapState = () => setMapState(prev => ({...prev}));
-      map.on('move', updateMapState);
-      map.on('zoom', updateMapState);
-      
-      mapRef.current = map;
-      map.whenReady(() => {
-        const kick = () => map.invalidateSize({ animate: false });
-        kick();
-        requestAnimationFrame(kick);
-        window.setTimeout(kick, 120);
-        window.setTimeout(kick, 450);
-        window.setTimeout(kick, 900);
-      });
-      setMapState({ isReady: true });
-    }
-  }, []);
-  
-  // Set tile layer
-  useEffect(() => {
-      if (!mapState.isReady || !mapRef.current) return;
-
-      const map = mapRef.current;
-
-      if (tileLayerRef.current) {
-          map.removeLayer(tileLayerRef.current);
+    if (!mapContainerRef.current || mapRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const mapboxgl = await loadMapbox(deploymentConfig.mapboxAccessToken);
+        if (cancelled || !mapContainerRef.current) return;
+        const map = new MapboxAdapter(mapboxgl, mapContainerRef.current, {
+          center: [15, 0],
+          zoom: 2,
+          minZoom: 1,
+          maxZoom: 18,
+          style: deploymentConfig.mapboxStyle,
+        });
+        map.setBasemapTheme(basemapTheme);
+        map.applyEditorialStyle();
+        let rafId = 0;
+        const updateViewport = () => {
+          if (rafId) return;
+          rafId = window.requestAnimationFrame(() => {
+            rafId = 0;
+            setMapViewportTick((tick) => tick + 1);
+          });
+        };
+        const updateZoom = () => {
+          setMapZoom(map.getZoom());
+          updateViewport();
+        };
+        map.on('move', updateViewport);
+        map.on('moveend', updateViewport);
+        map.on('zoom', updateZoom);
+        mapRef.current = map;
+        map.whenReady(() => {
+          const kick = () => map.invalidateSize();
+          kick();
+          requestAnimationFrame(kick);
+          window.setTimeout(kick, 120);
+          window.setTimeout(kick, 450);
+          window.setTimeout(kick, 900);
+        });
+        setMapZoom(map.getZoom());
+        setMapState({ isReady: true });
+      } catch (error) {
+        console.error('Mapbox init failed', error);
+        setToastMessage('Map visual layer failed to load. Please check Mapbox token.');
       }
+    })();
+    return () => {
+      cancelled = true;
+      mapRef.current?.destroy?.();
+      mapRef.current = null;
+    };
+  }, []);
 
-      const tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-      const tileOptions = {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: 'abcd',
-          maxZoom: 20,
-          maxNativeZoom: 19,
-          keepBuffer: 6,
-          updateWhenIdle: false,
-          crossOrigin: true,
-      };
-      
-      const newTileLayer = L.tileLayer(tileUrl, tileOptions);
-      newTileLayer.addTo(map);
-      tileLayerRef.current = newTileLayer;
-      const onTilesReady = () => {
-        map.invalidateSize({ animate: false });
-      };
-      newTileLayer.on('load', onTilesReady);
-      map.once('moveend', onTilesReady);
-
-  }, [mapState.isReady]);
+  useEffect(() => {
+    mapRef.current?.setBasemapTheme?.(basemapTheme);
+  }, [basemapTheme]);
 
   useEffect(() => {
     if (!mapState.isReady || !mapRef.current) return;
@@ -551,11 +556,11 @@ const App: React.FC = () => {
       if (cancelled || !mapRef.current) return;
       sessionAnchorRef.current = anchor;
       const m = mapRef.current;
-      m.setView([anchor.lat, anchor.lng], 5, { animate: true, duration: 1, easeLinearity: 0.35 });
+      m.setView([anchor.lat, anchor.lng], 5);
       requestAnimationFrame(() => {
-        m.invalidateSize({ animate: false });
-        window.setTimeout(() => m.invalidateSize({ animate: false }), 180);
-        window.setTimeout(() => m.invalidateSize({ animate: false }), 520);
+        m.invalidateSize();
+        window.setTimeout(() => m.invalidateSize(), 180);
+        window.setTimeout(() => m.invalidateSize(), 520);
       });
     })();
     return () => {
@@ -569,7 +574,7 @@ const App: React.FC = () => {
     const el = mapContainerRef.current;
     if (!mapState.isReady || !map || !el) return;
     const fix = () => {
-      map.invalidateSize({ animate: false });
+      map.invalidateSize();
     };
     fix();
     const t1 = window.setTimeout(fix, 50);
@@ -660,6 +665,7 @@ const App: React.FC = () => {
               flippedHorizontally: false,
               isLocked: true,
               photos: [],
+              audioEntries: [],
               log: {
                 location: s.place,
                 buildingName: s.src.includes('opera') ? 'Sydney Opera House' : 'Stone Wall',
@@ -688,13 +694,14 @@ const App: React.FC = () => {
   const generateFromImage = useCallback(async (
     file: File,
     id: number,
-    options?: { buildingName?: string; userPrompt?: string; buildingStyle?: BuildingStyleId }
+    options?: { buildingName?: string; userPrompt?: string; buildingStyle?: BuildingStyleId; preferredModel?: ImageProvider }
   ) => {
     try {
       const { imageUrl } = await generateImageWithPrompt(file, {
         buildingName: options?.buildingName,
         userPrompt: options?.userPrompt,
         buildingStyle: options?.buildingStyle,
+        preferredModel: options?.preferredModel ?? imageProvider,
       });
       if (!imageUrl) throw new Error("Generation failed, no image returned.");
       
@@ -727,7 +734,7 @@ const App: React.FC = () => {
         )
       );
     }
-  }, [t]);
+  }, [t, imageProvider]);
 
   const addImageAtLatLng = useCallback((
     file: File,
@@ -759,8 +766,10 @@ const App: React.FC = () => {
             file,
             url: sourcePreviewUrl,
             photo_id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `photo-${id}-0`,
+            createdAt: `${logInfo.date}T12:00:00`,
           },
         ],
+        audioEntries: [],
         log: {
             location: logInfo.location,
             buildingName: logInfo.buildingNameHint?.trim() || undefined,
@@ -795,10 +804,10 @@ const App: React.FC = () => {
         let locationName = await formatCityCountry(exifData.lat, exifData.lng, langTag);
         if (!locationName) locationName = await reverseGeocode(exifData.lat, exifData.lng, language);
         setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
-        mapRef.current.setView([exifData.lat, exifData.lng], 16, { animate: true, duration: 1, easeLinearity: 0.35 });
+        mapRef.current.setView([exifData.lat, exifData.lng], 16);
         requestAnimationFrame(() => {
-          mapRef.current?.invalidateSize({ animate: false });
-          window.setTimeout(() => mapRef.current?.invalidateSize({ animate: false }), 200);
+          mapRef.current?.invalidateSize();
+          window.setTimeout(() => mapRef.current?.invalidateSize(), 200);
         });
         addImageAtLatLng(file, exifData, {
           location: locationName,
@@ -840,10 +849,10 @@ const App: React.FC = () => {
             let locationName = await formatCityCountry(geo.lat, geo.lng, langTag);
             if (!locationName) locationName = geo.display_name || name;
             setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
-            mapRef.current.setView([geo.lat, geo.lng], 16, { animate: true, duration: 1, easeLinearity: 0.35 });
+            mapRef.current.setView([geo.lat, geo.lng], 16);
             requestAnimationFrame(() => {
-              mapRef.current?.invalidateSize({ animate: false });
-              window.setTimeout(() => mapRef.current?.invalidateSize({ animate: false }), 200);
+              mapRef.current?.invalidateSize();
+              window.setTimeout(() => mapRef.current?.invalidateSize(), 200);
             });
             const date = new Date().toISOString().split('T')[0];
             addImageAtLatLng(file, { lat: geo.lat, lng: geo.lng }, {
@@ -937,11 +946,11 @@ const App: React.FC = () => {
               let locationName = await formatCityCountry(exifData.lat, exifData.lng, langTag);
               if (!locationName) locationName = await reverseGeocode(exifData.lat, exifData.lng, language);
               setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
-              mapRef.current.setView([exifData.lat, exifData.lng], 16, { animate: true, duration: 1, easeLinearity: 0.35 });
+              mapRef.current.setView([exifData.lat, exifData.lng], 16);
               addImageAtLatLng(file, exifData, {location: locationName, date: exifData.date});
           } else {
               setToastMessage(t('toastNoLocationFound'));
-              const point = L.point(e.clientX, e.clientY);
+              const point = { x: e.clientX, y: e.clientY };
               const latlng = mapRef.current.containerPointToLatLng(point);
               const date = new Date().toISOString().split('T')[0];
               
@@ -963,23 +972,6 @@ const App: React.FC = () => {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (memoryToAddPhotoTo.current !== null) {
-      if (!file) {
-        setToastMessage('Capture cancelled or permission denied.');
-        memoryToAddPhotoTo.current = null;
-        e.target.value = '';
-        return;
-      }
-      if (file.type.startsWith('image/')) {
-        handleAddPhotoToMemory(memoryToAddPhotoTo.current, file);
-        memoryToAddPhotoTo.current = null;
-      } else {
-        setToastMessage('Could not add this file to the building.');
-        memoryToAddPhotoTo.current = null;
-      }
-      e.target.value = '';
-      return;
-    }
     if (file && file.type.startsWith('image/')) {
       const sizeCheck = assertFileSizeOk(file);
       if (!sizeCheck.ok) {
@@ -1003,13 +995,20 @@ const App: React.FC = () => {
         synth.triggerAttackRelease('G5', '8n');
         const url = URL.createObjectURL(file);
         const photoId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `photo-${memoryId}-${Date.now()}`;
-        const newPhoto: PhotoData = { file, url, photo_id: photoId };
+        const newPhoto: PhotoData = { file, url, photo_id: photoId, createdAt: new Date().toISOString() };
         setImages(prev => prev.map(img => img.id === memoryId
             ? { ...img, photos: [...img.photos, newPhoto] }
             : img
         ));
     }
   }, [t]);
+
+  const handleSaveAudioEntriesToMemory = useCallback((memoryId: number, entries: AudioEntry[]) => {
+    setImages((prev) =>
+      prev.map((img) => (img.id === memoryId ? { ...img, audioEntries: entries } : img))
+    );
+    setShowMemoryAudioModal(false);
+  }, []);
 
   const handleDeletePhotoFromMemory = useCallback(
     async (memoryId: number, photoIndex: number) => {
@@ -1087,8 +1086,8 @@ const App: React.FC = () => {
 
   const handleInteractionMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (draggingImage && mapRef.current) {
-        const startPoint = mapRef.current.latLngToContainerPoint(L.latLng(draggingImage.startLat, draggingImage.startLng));
-        const newPoint = L.point(startPoint.x + (e.clientX - draggingImage.startX), startPoint.y + (e.clientY - draggingImage.startY));
+        const startPoint = mapRef.current.latLngToContainerPoint([draggingImage.startLat, draggingImage.startLng]);
+        const newPoint = { x: startPoint.x + (e.clientX - draggingImage.startX), y: startPoint.y + (e.clientY - draggingImage.startY) };
         const newLatLng = mapRef.current.containerPointToLatLng(newPoint);
         
         setImages(prev => prev.map(img => img.id === draggingImage.id ? {
@@ -1121,8 +1120,8 @@ const App: React.FC = () => {
 
   const handleClusterClick = useCallback((cluster: Cluster) => {
     if (!mapRef.current) return;
-    const bounds = L.latLngBounds(cluster.images.map(img => [img.lat, img.lng]));
-    mapRef.current.fitBounds(bounds.pad(0.5), { animate: true, duration: 0.85, easeLinearity: 0.35 });
+    const bounds = createMapBounds(cluster.images.map(img => [img.lat, img.lng] as [number, number]));
+    mapRef.current.fitBounds(bounds);
   }, []);
 
   // --- LIFECYCLE & CLEANUP ---
@@ -1163,29 +1162,32 @@ const App: React.FC = () => {
     });
   }, [images]);
 
-  /** 登录且配置 Supabase：生成完成时自动上传该建筑 */
+  /** 登录后自动从云端加载地图（关闭手动 push/pull 交互） */
   useEffect(() => {
-    const prev = prevCloudSnapRef.current;
-    prevCloudSnapRef.current = images;
     const uid = user?.id;
     if (!uid || !isSupabaseConfigured) return;
-    if (!prev) return;
-    for (const img of images) {
-      const p = prev.find((x) => x.id === img.id);
-      if (!p) continue;
-      if (p.isGenerating && !img.isGenerating && img.processedImage) {
-        void (async () => {
-          try {
-            const cloudId = await saveBuildingToCloud(img, uid);
-            setImages((curr) => curr.map((x) => (x.id === img.id ? { ...x, cloudId } : x)));
-          } catch (e) {
-            console.error('cloud save', e);
-            setToastMessage(t('cloudSaveFailed'));
+    if (autoLoadedUidRef.current === uid) return;
+    autoLoadedUidRef.current = uid;
+    void (async () => {
+      try {
+        const loaded = await loadAllCloudBuildings(() => nextId.current++);
+        loaded.forEach((img) => {
+          if (img.photos[0]?.url) {
+            previewImageCache.current[img.id] = new Image();
+            previewImageCache.current[img.id].src = img.photos[0].url;
           }
-        })();
+        });
+        const maxId = loaded.reduce((m, i) => Math.max(m, i.id), 0);
+        nextId.current = Math.max(nextId.current, maxId + 1);
+        setImages(loaded);
+        setSelectedImageId(null);
+        setToastMessage(t('cloudPullOk'));
+      } catch (e) {
+        console.error(e);
+        setToastMessage(t('cloudPullFailed'));
       }
-    }
-  }, [images, user?.id, t]);
+    })();
+  }, [user?.id, t]);
   
   useEffect(() => {
       if (toastMessage) {
@@ -1266,8 +1268,8 @@ const App: React.FC = () => {
     if (!selectedImage || !mapRef.current) return;
 
     await ensureAudioContext(); synth.triggerAttackRelease('C4', '8n');
-    const screenPoint = mapRef.current.latLngToContainerPoint(L.latLng(selectedImage.lat, selectedImage.lng));
-    const newScreenPoint = L.point(screenPoint.x + 40, screenPoint.y + 20);
+    const screenPoint = mapRef.current.latLngToContainerPoint([selectedImage.lat, selectedImage.lng]);
+    const newScreenPoint = { x: screenPoint.x + 40, y: screenPoint.y + 20 };
     const newLatLng = mapRef.current.containerPointToLatLng(newScreenPoint);
     const newId = nextId.current++;
     const duplicatedImage: ProcessedImage = {
@@ -1351,15 +1353,14 @@ const App: React.FC = () => {
   };
 
   const handleAddPhotoClick = () => {
-      memoryToAddPhotoTo.current = selectedImageId;
-      fileInputRef.current?.click();
+      setShowMemoryPhotoModal(true);
   };
 
   const handleLocationSelect = useCallback((lat: number, lng: number) => {
     setMapExplored(true);
     if (mapRef.current) {
         const z = Math.max(mapRef.current.getZoom(), 4);
-        mapRef.current.setView([lat, lng], z, { animate: true, duration: 0.9, easeLinearity: 0.35 });
+        mapRef.current.setView([lat, lng], z);
     }
   }, []);
 
@@ -1423,14 +1424,29 @@ const App: React.FC = () => {
                 base64: await fileToBase64(photo.file),
                 name: photo.file.name,
                 photo_id: photo.photo_id,
+                createdAt: photo.createdAt,
             })));
 
-            const { processedImage, photos, sourceFile, cloudId: _omitCloud, ...rest } = img;
+            const audioEntriesData = await Promise.all(
+              img.audioEntries.map(async (entry) => ({
+                id: entry.id,
+                kind: entry.kind,
+                title: entry.title,
+                createdAt: entry.createdAt,
+                source: entry.source,
+                url: entry.source === 'builtin' ? entry.url : undefined,
+                base64: entry.file ? await fileToBase64(entry.file) : undefined,
+                name: entry.file?.name,
+              }))
+            );
+
+            const { processedImage, photos, audioEntries, sourceFile, cloudId: _omitCloud, ...rest } = img;
             return {
                 ...rest,
                 landmark_id: img.id,
                 processedImageBase64,
                 photos: photosData,
+                audioEntries: audioEntriesData,
                 log: normalizeLog(img.log),
             };
         }));
@@ -1506,8 +1522,33 @@ const App: React.FC = () => {
                         const photo_id =
                           photoData.photo_id ??
                           (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : undefined);
-                        return { file, url, photo_id };
+                        return { file, url, photo_id, createdAt: photoData.createdAt };
                     })
+                );
+
+                const audioEntries: AudioEntry[] = await Promise.all(
+                  (mem.audioEntries ?? []).map(async (entryData: any): Promise<AudioEntry> => {
+                    if (entryData.base64 && entryData.name) {
+                      const file = await base64ToFile(entryData.base64, entryData.name);
+                      return {
+                        id: entryData.id ?? (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `audio-${newId}`),
+                        kind: entryData.kind === 'music' ? 'music' : 'audio',
+                        title: entryData.title ?? entryData.name,
+                        createdAt: entryData.createdAt ?? new Date().toISOString(),
+                        source: entryData.source ?? 'upload',
+                        url: URL.createObjectURL(file),
+                        file,
+                      };
+                    }
+                    return {
+                      id: entryData.id ?? (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `audio-${newId}`),
+                      kind: entryData.kind === 'music' ? 'music' : 'audio',
+                      title: entryData.title ?? 'Audio',
+                      createdAt: entryData.createdAt ?? new Date().toISOString(),
+                      source: entryData.source ?? 'builtin',
+                      url: entryData.url ?? '',
+                    };
+                  })
                 );
                 
                 if (photos[0]?.file) {
@@ -1521,6 +1562,7 @@ const App: React.FC = () => {
                     cloudId: undefined,
                     processedImage,
                     photos,
+                    audioEntries,
                     sourceFile: photos[0]?.file,
                     buildingStyle: isBuildingStyleId(mem.buildingStyle)
                       ? mem.buildingStyle
@@ -1554,59 +1596,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePullFromCloud = useCallback(async () => {
-    const uid = user?.id;
-    if (!uid || !isSupabaseConfigured) return;
-    if (images.length > 0 && !window.confirm(t('cloudPullConfirm'))) return;
-    setCloudBusy(true);
-    try {
-      const loaded = await loadAllCloudBuildings(() => nextId.current++);
-      loaded.forEach((img) => {
-        if (img.photos[0]?.url) {
-          previewImageCache.current[img.id] = new Image();
-          previewImageCache.current[img.id].src = img.photos[0].url;
-        }
-      });
-      const maxId = loaded.reduce((m, i) => Math.max(m, i.id), 0);
-      nextId.current = Math.max(nextId.current, maxId + 1);
-      setImages(loaded);
-      setSelectedImageId(null);
-      setToastMessage(t('cloudPullOk'));
-    } catch (e) {
-      console.error(e);
-      setToastMessage(t('cloudPullFailed'));
-    } finally {
-      setCloudBusy(false);
-    }
-  }, [user?.id, images.length, t]);
-
-  const handlePushAllToCloud = useCallback(async () => {
-    const uid = user?.id;
-    if (!uid || !isSupabaseConfigured) return;
-    setCloudBusy(true);
-    try {
-      const ids: Record<number, string> = {};
-      for (const img of images) {
-        if (!img.processedImage || img.isGenerating) continue;
-        const cloudId = await saveBuildingToCloud(img, uid);
-        ids[img.id] = cloudId;
-      }
-      setImages((curr) => curr.map((x) => (ids[x.id] ? { ...x, cloudId: ids[x.id] } : x)));
-      setToastMessage(t('cloudPushOk', { count: String(Object.keys(ids).length) }));
-    } catch (e) {
-      console.error(e);
-      setToastMessage(t('cloudPushFailed'));
-    } finally {
-      setCloudBusy(false);
-    }
-  }, [images, user?.id, t]);
-
 
   // --- RENDER ---
   const sortedItems = useMemo(() => 
     [...itemsToDisplay].sort((a, b) => b.lat - a.lat), 
     [itemsToDisplay]
   );
+
+  const mapReferenceOpacity = useMemo(() => 1, []);
 
   /** Gallery / 热力图：仅展示已在地图上点击 Lock 的建筑；且需有图或照片可展示 */
   const lockedGalleryBuildings = useMemo(
@@ -1724,6 +1721,12 @@ const App: React.FC = () => {
     const id = tab === 'home' ? 'echo-section-home' : 'echo-section-gallery';
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
+  const scrollToGallery = useCallback(() => {
+    document.getElementById('echo-section-gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+  const scrollToHome = useCallback(() => {
+    document.getElementById('echo-section-home')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   useEffect(() => {
     const el = mainScrollRef.current;
@@ -1792,6 +1795,8 @@ const App: React.FC = () => {
       if (showResetConfirm || showImportConfirm) return;
       setShowHelpModal(false);
       setShowAddBuildingModal(false);
+      setShowMemoryPhotoModal(false);
+      setShowMemoryAudioModal(false);
       setPhotoPreviewState(null);
       setShowLogModal(false);
       setGalleryOpenM03(false);
@@ -1809,7 +1814,29 @@ const App: React.FC = () => {
     [startImagePlacement]
   );
 
+  const handleMapSurfacePointerDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!selectedImage || !selectedImage.isLocked) return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      if (
+        target.closest('[id^="image-"]') ||
+        target.closest('[data-selection-overlay]') ||
+        target.closest('[data-map-ui]')
+      ) {
+        return;
+      }
+
+      setSelectedImageId(null);
+    },
+    [selectedImage]
+  );
+
   const galleryBuilding = galleryDetailId !== null ? images.find((i) => i.id === galleryDetailId) : null;
+  const isLocateSuccessToast = Boolean(
+    toastMessage && toastMessage.startsWith(t('toastLocationFound'))
+  );
 
   return (
     <div className="min-h-screen bg-[#F9F1E2] text-[#332115]">
@@ -1817,23 +1844,21 @@ const App: React.FC = () => {
         <EchoSidebar
           activeTab={echoTab}
           onNavigate={handleEchoNavigate}
+          imageProvider={imageProvider}
+          onImageProviderChange={setImageProvider}
           statsFade={statsFade}
           homeStatusSlot={homeStatusSlot}
           galleryStatsSlot={galleryStatsSlot}
           footerSlot={
             echoTab === 'home' ? (
-              <AuthPanel
-                cloudBusy={cloudBusy}
-                onPullFromCloud={handlePullFromCloud}
-                onPushAllToCloud={handlePushAllToCloud}
-              />
+              <AuthPanel />
             ) : null
           }
         />
 
         <div
           ref={mainScrollRef}
-          className="scrollbar-hide flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain scroll-smooth bg-white snap-y snap-mandatory md:flex-1 md:min-w-0 h-dvh"
+          className="scrollbar-hide flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain scroll-smooth bg-white snap-y snap-proximity md:flex-1 md:min-w-0 h-dvh"
         >
         <section
           id="echo-section-home"
@@ -1845,8 +1870,49 @@ const App: React.FC = () => {
           onMouseUp={handleInteractionEnd}
           onMouseLeave={handleInteractionEnd}
         >
-        <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
+        <div
+          className="relative flex min-h-0 w-full flex-1 overflow-hidden"
+          onMouseDownCapture={handleMapSurfacePointerDown}
+        >
         <div className="absolute top-4 right-4 z-[60] flex items-center gap-2 pointer-events-auto">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowBasemapMenu((open) => !open)}
+              data-map-ui="basemap-theme"
+              className="w-7 h-7 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+              style={{ borderWidth: MAP_ICON_BORDER_PX }}
+              aria-label="Change basemap theme"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="13.5" cy="6.5" r=".5" />
+                <circle cx="17.5" cy="10.5" r=".5" />
+                <circle cx="8.5" cy="7.5" r=".5" />
+                <circle cx="6.5" cy="12.5" r=".5" />
+                <path d="M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-2.2a1.8 1.8 0 0 1-1.8-1.8c0-.5.2-.9.5-1.3l1.1-1.1A2.4 2.4 0 0 0 15 3h-3Z" />
+              </svg>
+            </button>
+            {showBasemapMenu && (
+              <div className="absolute right-0 top-10 min-w-[156px] border border-black bg-white px-2 py-2 shadow-[0_10px_24px_rgba(0,0,0,0.1)]">
+                {BASEMAP_THEME_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      setBasemapTheme(option.id);
+                      setShowBasemapMenu(false);
+                    }}
+                    data-map-ui="basemap-theme-option"
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-neutral-100 border-0 bg-transparent"
+                    style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
+                  >
+                    <span>{option.label}</span>
+                    {basemapTheme === option.id ? <span>•</span> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -1855,13 +1921,11 @@ const App: React.FC = () => {
                 setToastMessage('Location anchor not ready yet.');
                 return;
               }
-              mapRef.current.setView([a.lat, a.lng], Math.max(6, mapRef.current.getZoom()), {
-                animate: true,
-                duration: 1,
-                easeLinearity: 0.35,
-              });
+              mapRef.current.setView([a.lat, a.lng], Math.max(6, mapRef.current.getZoom()));
             }}
+            data-map-ui="back-to-location"
             className="w-7 h-7 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label="Back to my location"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -1872,7 +1936,9 @@ const App: React.FC = () => {
           <button
             type="button"
             onClick={toggleLanguage}
+            data-map-ui="language-toggle"
             className="w-7 h-7 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[11px] font-semibold leading-none"
+            style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('toggleLanguage')}
           >
             {language === 'en' ? '中' : 'EN'}
@@ -1880,20 +1946,38 @@ const App: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowHelpModal(true)}
+            data-map-ui="help"
             className="w-7 h-7 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('showHelp')}
           >
             ?
           </button>
         </div>
 
-        <div ref={mapContainerRef} id="map" className="absolute inset-0 z-0 h-full w-full min-h-[40vh]" />
+        <div
+          ref={mapContainerRef}
+          id="map"
+          className="absolute inset-0 z-[1] h-full w-full min-h-[40vh] echo-map-shell"
+          style={{ opacity: mapReferenceOpacity }}
+        />
+        {echoTab === 'home' && mapState.isReady && mapRef.current && (
+          <BuildingConnectionsOverlay
+            map={mapRef.current}
+            mapViewportTick={mapViewportTick}
+            images={images}
+            visible={mapRef.current.getZoom() <= POI_DOT_ZOOM_THRESHOLD}
+            basemapTheme={basemapTheme}
+          />
+        )}
 
         {echoTab === 'home' && mapState.isReady && mapRef.current && (
           <div className="absolute top-4 left-4 z-30 flex flex-col gap-1 pointer-events-auto">
             <button
               type="button"
+              data-map-ui="zoom-in"
               className="w-9 h-9 border border-black bg-white flex items-center justify-center text-lg leading-none hover:bg-neutral-100"
+              style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Zoom in"
               onClick={() => {
                 setMapExplored(true);
@@ -1904,7 +1988,9 @@ const App: React.FC = () => {
             </button>
             <button
               type="button"
+              data-map-ui="zoom-out"
               className="w-9 h-9 border border-black bg-white flex items-center justify-center text-lg leading-none hover:bg-neutral-100"
+              style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Zoom out"
               onClick={() => {
                 setMapExplored(true);
@@ -1933,6 +2019,7 @@ const App: React.FC = () => {
                           key={item.id}
                           cluster={item}
                           map={mapRef.current!}
+                          mapViewportTick={mapViewportTick}
                           onClick={handleClusterClick}
                         />
                       );
@@ -1944,20 +2031,23 @@ const App: React.FC = () => {
                           key={img.id}
                           img={img}
                           map={mapRef.current!}
+                          mapViewportTick={mapViewportTick}
                           isSelected={selectedImageId === img.id}
+                          basemapTheme={basemapTheme}
                           onInteractionStart={handleInteractionStart}
                           onHoverChange={setHoveredImageId}
                         />
                       );
                     }
                     return (
-                      <ImageMarker
-                        key={img.id}
-                        img={img}
-                        map={mapRef.current!}
-                        isSelected={selectedImageId === img.id}
-                        isDragging={draggingImage?.id === img.id}
-                        animationTick={animationTick}
+                        <ImageMarker
+                          key={img.id}
+                          img={img}
+                          map={mapRef.current!}
+                          mapViewportTick={mapViewportTick}
+                          isSelected={selectedImageId === img.id}
+                          isDragging={draggingImage?.id === img.id}
+                          animationTick={animationTick}
                         previewImageCache={previewImageCache}
                         onInteractionStart={handleInteractionStart}
                         onAddPhotoToMemory={handleAddPhotoToMemory}
@@ -1971,8 +2061,6 @@ const App: React.FC = () => {
         )}
 
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*"/>
-        <input ref={memoryCaptureInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileUpload} />
-        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileUpload} />
         <input type="file" ref={importInputRef} onChange={handleImportFileChange} className="hidden" accept=".pixmap" />
 
         {!mapExplored && images.length === 0 && !placementInfo && !isLoading && (
@@ -2031,6 +2119,7 @@ const App: React.FC = () => {
              <Toolbar
                 selectedImage={selectedImage}
                 map={mapRef.current}
+                mapViewportTick={mapViewportTick}
                 onRegenerate={handleRegenerateSelected}
                 onFlip={handleFlipSelected}
                 onDuplicate={handleDuplicateSelected}
@@ -2045,15 +2134,12 @@ const App: React.FC = () => {
             <MemoryCards
                 selectedImage={selectedImage}
                 map={mapRef.current}
+                mapViewportTick={mapViewportTick}
                 onUnlock={handleUnlockSelected}
                 onViewPhoto={handleViewPhoto}
-                onAddPhoto={handleAddPhotoClick}
-                onLiveCapture={() => {
-                  memoryToAddPhotoTo.current = selectedImageId;
-                  memoryCaptureInputRef.current?.click();
-                }}
+                onOpenPhotoModal={handleAddPhotoClick}
+                onOpenAudioModal={() => setShowMemoryAudioModal(true)}
                 onEditLog={handleEditLog}
-                onDeletePhoto={handleDeletePhotoFromMemory}
             />
         )}
        
@@ -2066,22 +2152,16 @@ const App: React.FC = () => {
                     setShowAddBuildingModal(true);
                   }}
                   className="w-11 h-11 rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
+                  style={{ borderWidth: MAP_ICON_BORDER_PX }}
                   aria-label={t('hammerAddBuilding')}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0-.83-.83-.83-2.17 0-3L12 9"/><path d="m17.64 6.36-1.28-1.28a1.21 1.21 0 0 0-1.72 0L4.36 16.36a1.21 1.21 0 0 0 0 1.72l1.28 1.28c.47.47 1.23.47 1.7 0l10.28-10.28a1.21 1.21 0 0 0 0-1.72Z"/><path d="m22 2-5 5"/></svg>
                 </button>
                 <button
                   type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  className="w-11 h-11 rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
-                  aria-label={t('cameraCapture')}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-                </button>
-                <button
-                  type="button"
                   onClick={() => void handleExport()}
                   className="w-11 h-11 rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
+                  style={{ borderWidth: MAP_ICON_BORDER_PX }}
                   aria-label={t('exportMap')}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -2110,6 +2190,24 @@ const App: React.FC = () => {
         <div
           className="relative flex h-[25dvh] shrink-0 flex-col items-center justify-center bg-[#F9F1E2] px-6 py-3 z-[25]"
           style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
+          onWheel={(e) => {
+            if (e.deltaY > 36) {
+              e.preventDefault();
+              scrollToGallery();
+            }
+          }}
+          onTouchStart={(e) => {
+            homeTransitionTouchStartYRef.current = e.touches[0]?.clientY ?? null;
+          }}
+          onTouchEnd={(e) => {
+            const start = homeTransitionTouchStartYRef.current;
+            const end = e.changedTouches[0]?.clientY ?? null;
+            homeTransitionTouchStartYRef.current = null;
+            if (start == null || end == null) return;
+            const dy = end - start;
+            if (dy > -46) return;
+            scrollToGallery();
+          }}
         >
           <button
             type="button"
@@ -2120,7 +2218,7 @@ const App: React.FC = () => {
               letterSpacing: '0.04em',
             }}
             onClick={() =>
-              document.getElementById('echo-section-gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              scrollToGallery()
             }
           >
             <span>Scroll for more</span>
@@ -2152,6 +2250,7 @@ const App: React.FC = () => {
         >
             <GallerySection
               buildings={lockedGalleryBuildings}
+              onSwipeToHome={scrollToHome}
               onOpenBuilding={(id) => {
                 setGalleryDetailId(id);
                 setGalleryOpenM03(true);
@@ -2172,7 +2271,11 @@ const App: React.FC = () => {
       )}
 
       {toastMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-md shadow-lg z-[200] animate-toast flex items-center gap-2">
+        <div
+          className={`fixed left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-md shadow-lg z-[200] animate-toast flex items-center gap-2 ${
+            isLocateSuccessToast ? 'top-1/2 -translate-y-1/2' : 'top-4'
+          }`}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
           {toastMessage}
         </div>
@@ -2208,6 +2311,26 @@ const App: React.FC = () => {
         <TravelLogModal log={selectedImage.log} onSave={handleSaveLog} onClose={() => setShowLogModal(false)} />
       )}
 
+      <MemoryPhotoModal
+        open={showMemoryPhotoModal}
+        onClose={() => setShowMemoryPhotoModal(false)}
+        onSave={(file) => {
+          if (selectedImageId === null) return;
+          void handleAddPhotoToMemory(selectedImageId, file);
+          setShowMemoryPhotoModal(false);
+        }}
+      />
+
+      <MemoryAudioModal
+        open={showMemoryAudioModal}
+        currentEntries={selectedImage?.audioEntries ?? []}
+        onClose={() => setShowMemoryAudioModal(false)}
+        onSave={(entries) => {
+          if (selectedImageId === null) return;
+          handleSaveAudioEntriesToMemory(selectedImageId, entries);
+        }}
+      />
+
       <AddBuildingModal
         open={showAddBuildingModal}
         onClose={() => setShowAddBuildingModal(false)}
@@ -2223,6 +2346,7 @@ const App: React.FC = () => {
         openM03={galleryOpenM03}
         openM04={galleryOpenM04}
         photos={galleryBuilding?.photos ?? []}
+        audioEntries={galleryBuilding?.audioEntries ?? []}
         log={
           galleryBuilding?.log ??
           normalizeLog({

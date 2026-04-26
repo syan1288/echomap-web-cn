@@ -97,6 +97,52 @@ async function geocodeOpenMeteo(q: string): Promise<{
   return { lat: hit.latitude, lng: hit.longitude, display_name };
 }
 
+async function geocodeAmap(q: string): Promise<{
+  lat: number;
+  lng: number;
+  display_name: string;
+} | null> {
+  const key = process.env.VITE_AMAP_WEB_KEY?.trim() || process.env.AMAP_WEB_KEY?.trim() || '';
+  if (!key) return null;
+  const url =
+    `https://restapi.amap.com/v3/geocode/geo?output=json&key=${encodeURIComponent(key)}` +
+    `&address=${encodeURIComponent(q)}`;
+  const r = await fetch(url, { headers: { 'User-Agent': 'EchoMap/1.0' } });
+  if (!r.ok) {
+    logLine('geocode_amap_http', { status: r.status, q });
+    return null;
+  }
+  const j = (await r.json()) as {
+    status?: string;
+    geocodes?: Array<{
+      location?: string;
+      formatted_address?: string;
+      province?: string;
+      city?: string | string[];
+      district?: string;
+    }>;
+  };
+  if (j.status !== '1' || !j.geocodes?.length) return null;
+  const hit = j.geocodes[0];
+  const [lngText, latText] = String(hit.location || '').split(',');
+  const lat = Number(latText);
+  const lng = Number(lngText);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const cityValue = hit.city;
+  const city =
+    typeof cityValue === 'string'
+      ? cityValue
+      : Array.isArray(cityValue)
+        ? cityValue.find((item): item is string => typeof item === 'string' && item.length > 0) || ''
+        : '';
+  return {
+    lat,
+    lng,
+    display_name:
+      hit.formatted_address || [hit.province, city, hit.district].filter(Boolean).join(', ') || q,
+  };
+}
+
 function pickBestNominatimHit(
   data: Array<{
     lat: string;
@@ -282,7 +328,7 @@ export async function handleEchoHealth(): Promise<Record<string, unknown>> {
       hasGeminiApiKey: hasGeminiKey,
       googleCloudLocation: (env.GOOGLE_CLOUD_LOCATION || 'us-central1').trim(),
     },
-    geocode: 'nominatim+open-meteo',
+    geocode: process.env.VITE_AMAP_WEB_KEY?.trim() || process.env.AMAP_WEB_KEY?.trim() ? 'amap' : 'nominatim+open-meteo',
     imageModel,
     message: ai
       ? 'POST /api/generate available'
@@ -411,9 +457,25 @@ export async function handleGeocode(
   let lat: number | undefined;
   let lng: number | undefined;
   let display_name: string | undefined;
-  let provider: 'nominatim' | 'open-meteo' | undefined;
+  let provider: 'amap' | 'nominatim' | 'open-meteo' | undefined;
 
   try {
+    const amap = await geocodeAmap(q);
+    if (amap) {
+      lat = amap.lat;
+      lng = amap.lng;
+      display_name = amap.display_name;
+      provider = 'amap';
+      logLine('geocode_ok', { q, provider: 'amap' });
+    }
+  } catch (e: unknown) {
+    logLine('geocode_amap_error', { q, error: e instanceof Error ? e.message : String(e) });
+  }
+
+  try {
+    if (lat != null && lng != null) {
+      return { status: 200, json: { found: true, lat, lng, display_name, provider } };
+    }
     const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&limit=10`;
     const r = await fetch(url, { headers: { 'User-Agent': 'EchoMap/1.0 (vercel)' } });
     if (r.ok) {

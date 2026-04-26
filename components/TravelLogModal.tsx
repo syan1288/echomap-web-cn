@@ -64,7 +64,7 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-white p-6 border border-black shadow-lg text-black w-full max-w-md flex flex-col gap-4"
+        className="bg-white p-6 border border-black shadow-xl text-black w-full max-w-[720px] min-h-[620px] flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
         style={{ fontFamily: FONT_BODY, fontWeight: 400 }}
       >
@@ -174,7 +174,7 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
           />
         </div>
 
-        <div className="flex justify-end gap-2 mt-4">
+        <div className="flex justify-end gap-2 mt-auto pt-4">
           <button
             type="button"
             onClick={onClose}

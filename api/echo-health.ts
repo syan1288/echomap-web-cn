@@ -6,6 +6,19 @@ import { tmpdir } from 'node:os';
 
 type EchoApiEnv = {
   GEMINI_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_IMAGE_MODEL?: string;
+  JIMENG_ACCESS_KEY_ID?: string;
+  JIMENG_SECRET_ACCESS_KEY?: string;
+  JIMENG_BASE_URL?: string;
+  JIMENG_REQ_KEY?: string;
+  JIMENG_REGION?: string;
+  JIMENG_SERVICE?: string;
+  ARK_API_KEY?: string;
+  ARK_BASE_URL?: string;
+  JIMENG_API_KEY?: string;
+  JIMENG_API_BASE_URL?: string;
+  JIMENG_IMAGE_MODEL?: string;
   GOOGLE_CLOUD_PROJECT?: string;
   GOOGLE_CLOUD_LOCATION?: string;
   GOOGLE_APPLICATION_CREDENTIALS?: string;
@@ -34,6 +47,19 @@ function handleOptions(req: VercelRequest, res: VercelResponse): boolean {
 function envFromProcess(): EchoApiEnv {
   return {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL,
+    JIMENG_ACCESS_KEY_ID: process.env.JIMENG_ACCESS_KEY_ID,
+    JIMENG_SECRET_ACCESS_KEY: process.env.JIMENG_SECRET_ACCESS_KEY,
+    JIMENG_BASE_URL: process.env.JIMENG_BASE_URL,
+    JIMENG_REQ_KEY: process.env.JIMENG_REQ_KEY,
+    JIMENG_REGION: process.env.JIMENG_REGION,
+    JIMENG_SERVICE: process.env.JIMENG_SERVICE,
+    ARK_API_KEY: process.env.ARK_API_KEY,
+    ARK_BASE_URL: process.env.ARK_BASE_URL,
+    JIMENG_API_KEY: process.env.JIMENG_API_KEY,
+    JIMENG_API_BASE_URL: process.env.JIMENG_API_BASE_URL,
+    JIMENG_IMAGE_MODEL: process.env.JIMENG_IMAGE_MODEL,
     GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
     GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
     GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
@@ -80,6 +106,14 @@ function resolveImageModel(env: EchoApiEnv): string {
   return env.GEMINI_IMAGE_MODEL?.trim() || env.ECHO_IMAGE_MODEL?.trim() || 'gemini-2.5-flash-image';
 }
 
+function resolveOpenAIImageModel(env: EchoApiEnv): string {
+  return env.OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-1.5';
+}
+
+function resolveJimengImageModel(env: EchoApiEnv): string {
+  return env.JIMENG_REQ_KEY?.trim() || 'jimeng_seedream46_cvtob';
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (handleOptions(req, res)) return;
   applyCors(req, res);
@@ -98,6 +132,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const hasProject = Boolean(env.GOOGLE_CLOUD_PROJECT?.trim());
     const hasCredVar = Boolean(env.GOOGLE_APPLICATION_CREDENTIALS?.trim() || env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim());
     const hasGeminiKey = Boolean(env.GEMINI_API_KEY?.trim());
+    const hasOpenAiKey = Boolean(env.OPENAI_API_KEY?.trim());
+    const hasJimengKeys = Boolean(env.JIMENG_ACCESS_KEY_ID?.trim() && env.JIMENG_SECRET_ACCESS_KEY?.trim());
     const ai = createGenAI(env);
     const imageModel = resolveImageModel(env);
 
@@ -108,21 +144,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       JSON.stringify({
         ok: true,
         echoApi: true,
-        generateConfigured: Boolean(ai),
+        generateConfigured: Boolean(ai) || hasOpenAiKey || hasJimengKeys,
         env: {
           hasGoogleCloudProject: hasProject,
           hasGoogleApplicationCredentials: hasCredVar,
           credentialsFileExists,
           hasGeminiApiKey: hasGeminiKey,
+          hasOpenAiKey,
+          hasJimengKeys,
           googleCloudLocation: (env.GOOGLE_CLOUD_LOCATION || 'us-central1').trim(),
         },
-        geocode: 'nominatim+open-meteo',
+        geocode: process.env.VITE_AMAP_WEB_KEY?.trim() || process.env.AMAP_WEB_KEY?.trim() ? 'amap' : 'nominatim+open-meteo',
         imageModel,
-        message: ai
+        openAiImageModel: resolveOpenAIImageModel(env),
+        jimengImageModel: resolveJimengImageModel(env),
+        message: ai || hasOpenAiKey || hasJimengKeys
           ? 'POST /api/generate available'
           : hasProject && hasCredVar && !credentialsFileExists && !env.GOOGLE_SERVICE_ACCOUNT_JSON
             ? 'GOOGLE_APPLICATION_CREDENTIALS path not found — use GOOGLE_SERVICE_ACCOUNT_JSON on Vercel'
-            : 'Set GEMINI_API_KEY or GOOGLE_CLOUD_PROJECT + credentials (file or GOOGLE_SERVICE_ACCOUNT_JSON)',
+            : 'Set GEMINI_API_KEY, OPENAI_API_KEY, JIMENG_ACCESS_KEY_ID + JIMENG_SECRET_ACCESS_KEY, or GOOGLE_CLOUD_PROJECT + credentials (file or GOOGLE_SERVICE_ACCOUNT_JSON)',
       })
     );
   } catch (e: unknown) {

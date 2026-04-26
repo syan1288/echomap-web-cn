@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
-import type { ProcessedImage, PhotoData, LogData } from '../types/memory';
+import type { AudioEntry, ProcessedImage, PhotoData, LogData } from '../types/memory';
 import { normalizeLog } from '../utils/normalizeLog';
 import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from '../prompts/buildingStyle';
 
@@ -18,7 +18,18 @@ export type BuildingRow = {
   content_bounds: { x: number; y: number; width: number; height: number };
   log: Record<string, unknown>;
   processed_image_path: string | null;
-  photos: Array<{ path: string; name?: string; photo_id?: string }>;
+  photos: Array<{ path: string; name?: string; photo_id?: string; createdAt?: string }>;
+};
+
+type StoredAudioEntry = {
+  id: string;
+  kind: 'audio' | 'music';
+  title: string;
+  createdAt: string;
+  source: 'recording' | 'upload' | 'builtin';
+  path?: string;
+  url?: string;
+  name?: string;
 };
 
 const BUCKET = 'buildings';
@@ -107,9 +118,47 @@ export async function loadAllCloudBuildings(nextLocalId: () => number): Promise<
       photos.push({
         file,
         url,
+        createdAt: meta.createdAt,
         photo_id:
           meta.photo_id ??
           (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `p-${localId}-${i}`),
+      });
+    }
+
+    const rawAudioEntries = Array.isArray((raw.log as Record<string, unknown>)?.audio_entries)
+      ? ((raw.log as Record<string, unknown>).audio_entries as StoredAudioEntry[])
+      : [];
+    const audioEntries: AudioEntry[] = [];
+    for (let i = 0; i < rawAudioEntries.length; i++) {
+      const entry = rawAudioEntries[i];
+      if (!entry?.id || !entry?.kind || !entry?.title) continue;
+      if (entry.source === 'builtin' && entry.url) {
+        audioEntries.push({
+          id: entry.id,
+          kind: entry.kind,
+          title: entry.title,
+          createdAt: entry.createdAt,
+          source: entry.source,
+          url: entry.url,
+        });
+        continue;
+      }
+      if (!entry.path) continue;
+      const { data: ab, error: ae } = await supabase.storage.from(BUCKET).download(entry.path);
+      if (ae || !ab || !ab.size) {
+        console.warn('[cloud] audio download', entry.path, ae?.message);
+        continue;
+      }
+      const file = new File([ab], entry.name || `audio-${i}.webm`, { type: ab.type || 'audio/webm' });
+      const url = URL.createObjectURL(file);
+      audioEntries.push({
+        id: entry.id,
+        kind: entry.kind,
+        title: entry.title,
+        createdAt: entry.createdAt,
+        source: entry.source,
+        url,
+        file,
       });
     }
 
@@ -144,6 +193,7 @@ export async function loadAllCloudBuildings(nextLocalId: () => number): Promise<
       isLocked: raw.is_locked,
       buildingStyle: style ?? DEFAULT_BUILDING_STYLE,
       photos,
+      audioEntries,
       log,
       sourceFile: photos[0]?.file,
     });
@@ -167,14 +217,47 @@ export async function saveBuildingToCloud(img: ProcessedImage, userId: string): 
   });
   if (upProc) throw upProc;
 
-  const photoMeta: Array<{ path: string; name?: string; photo_id?: string }> = [];
+  const photoMeta: Array<{ path: string; name?: string; photo_id?: string; createdAt?: string }> = [];
   for (let i = 0; i < img.photos.length; i++) {
     const p = img.photos[i];
     const ext = (p.file.name.split('.').pop() || 'jpg').slice(0, 8);
     const path = `${base}/photo_${i}.${ext}`;
     const { error: upPh } = await supabase.storage.from(BUCKET).upload(path, p.file, { upsert: true, contentType: p.file.type || 'image/jpeg' });
     if (upPh) throw upPh;
-    photoMeta.push({ path, name: p.file.name, photo_id: p.photo_id });
+    photoMeta.push({ path, name: p.file.name, photo_id: p.photo_id, createdAt: p.createdAt });
+  }
+
+  const audioMeta: StoredAudioEntry[] = [];
+  for (let i = 0; i < img.audioEntries.length; i++) {
+    const entry = img.audioEntries[i];
+    if (entry.source === 'builtin') {
+      audioMeta.push({
+        id: entry.id,
+        kind: entry.kind,
+        title: entry.title,
+        createdAt: entry.createdAt,
+        source: entry.source,
+        url: entry.url,
+      });
+      continue;
+    }
+    if (!entry.file) continue;
+    const ext = (entry.file.name.split('.').pop() || 'webm').slice(0, 8);
+    const path = `${base}/audio_${i}.${ext}`;
+    const { error: upAudio } = await supabase.storage.from(BUCKET).upload(path, entry.file, {
+      upsert: true,
+      contentType: entry.file.type || 'audio/webm',
+    });
+    if (upAudio) throw upAudio;
+    audioMeta.push({
+      id: entry.id,
+      kind: entry.kind,
+      title: entry.title,
+      createdAt: entry.createdAt,
+      source: entry.source,
+      path,
+      name: entry.file.name,
+    });
   }
 
   const row = {
@@ -188,7 +271,7 @@ export async function saveBuildingToCloud(img: ProcessedImage, userId: string): 
     is_locked: Boolean(img.isLocked),
     building_style: img.buildingStyle ?? DEFAULT_BUILDING_STYLE,
     content_bounds: img.contentBounds,
-    log: { ...img.log, landmark_id: img.id } as unknown as Record<string, unknown>,
+    log: { ...img.log, landmark_id: img.id, audio_entries: audioMeta } as unknown as Record<string, unknown>,
     processed_image_path: procPath,
     photos: photoMeta,
   };

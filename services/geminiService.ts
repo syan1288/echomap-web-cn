@@ -1,6 +1,8 @@
 import { assertFileSizeOk, MAX_UPLOAD_BYTES } from '../constants/uploadLimits';
 import { apiUrl } from '../lib/apiBase';
 import type { BuildingStyleId } from '../prompts/buildingStyle';
+import { uploadImageAndCreateJimengUrl } from './jimengInputUpload';
+export type PreferredImageModel = 'gemini' | 'jimeng' | 'gpt-image-2';
 
 /** 与后端 POST 路径一致；本地由 Vite 插件提供，生产由 VITE_API_BASE_URL 指向的服务提供 */
 function generateEndpoint(): string {
@@ -31,6 +33,8 @@ export interface GenerateImageOptions {
   userPrompt?: string;
   /** 与 AddBuildingModal 一致，决定 Vertex systemInstruction 风格 */
   buildingStyle?: BuildingStyleId;
+  /** 预留给多模型路由：gemini | 即梦 | gpt-image-2 */
+  preferredModel?: PreferredImageModel;
 }
 
 /** POST /api/generate：开发时由 Vite 插件转发 Vertex；生产需部署等价接口 */
@@ -44,15 +48,19 @@ export const generateImageWithPrompt = async (
   }
 
   const imageBase64 = await fileToBase64(imageFile);
+  const jimengImageUrls =
+    options.preferredModel === 'jimeng' ? [await uploadImageAndCreateJimengUrl(imageFile)] : undefined;
   const res = await fetch(generateEndpoint(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       imageBase64,
+      imageUrls: jimengImageUrls,
       mimeType: imageFile.type || 'image/jpeg',
       buildingName: options.buildingName?.trim() || undefined,
       userPrompt: options.userPrompt?.trim() || undefined,
       buildingStyle: options.buildingStyle || undefined,
+      preferredModel: options.preferredModel || undefined,
     }),
   });
 
@@ -60,6 +68,7 @@ export const generateImageWithPrompt = async (
     imageUrl?: string;
     error?: string;
     model?: string;
+    requestedModel?: PreferredImageModel;
     backend?: string;
   };
 

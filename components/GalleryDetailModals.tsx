@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { LogData, PhotoData } from '../App';
+import type { AudioEntry, LogData, PhotoData } from '../App';
 import { MoonFaceAvatar } from './MoonFaceAvatar';
 
 const FONT_TITLE = '"Roboto Mono", ui-monospace, monospace';
@@ -10,6 +10,7 @@ export interface GalleryDetailModalsProps {
   openM04: boolean;
   log: LogData;
   photos: PhotoData[];
+  audioEntries: AudioEntry[];
   onGoToMemories: () => void;
   onBackToGalleryFromM03: () => void;
   onBackToDiary: () => void;
@@ -21,12 +22,17 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
   openM04,
   log,
   photos,
+  audioEntries,
   onGoToMemories,
   onBackToGalleryFromM03,
   onBackToDiary,
   onBackToGalleryFromM04,
 }) => {
   const [page, setPage] = useState(1);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [fullscreenIndex, setFullscreenIndex] = useState(0);
+  const [dragStartX, setDragStartX] = useState<number | null>(null);
+  const [playlistIndex, setPlaylistIndex] = useState(0);
   const perPage = 9;
   const totalPages = Math.max(1, Math.ceil(photos.length / perPage));
   const slice = photos.slice((page - 1) * perPage, page * perPage);
@@ -35,6 +41,20 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
     const tp = Math.max(1, Math.ceil(photos.length / perPage));
     setPage((p) => Math.min(Math.max(1, p), tp));
   }, [photos.length, perPage, openM04]);
+
+  useEffect(() => {
+    if (!openM04) {
+      setFullscreenOpen(false);
+      setFullscreenIndex(0);
+      setDragStartX(null);
+      setPlaylistIndex(0);
+    }
+  }, [openM04]);
+
+  const playbackQueue = [...audioEntries].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'music' ? -1 : 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 
   if (!openM03 && !openM04) return null;
 
@@ -139,14 +159,38 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
           &gt; Back to gallery
         </button>
       </div>
-      <h3 className="text-lg mb-4 text-[#332115]" style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}>
-        Photos
-      </h3>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-lg m-0 text-[#332115]" style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}>
+          Photos
+        </h3>
+        <button
+          type="button"
+          className="h-9 w-9 border-0 bg-transparent cursor-pointer text-[#5a5a5a] hover:text-black"
+          aria-label="Open immersive photo review"
+          onClick={() => {
+            if (!photos.length) return;
+            setFullscreenIndex(0);
+            setPlaylistIndex(0);
+            setFullscreenOpen(true);
+          }}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M7 3H5a2 2 0 0 0-2 2v2M17 3h2a2 2 0 0 1 2 2v2M7 21H5a2 2 0 0 1-2-2v-2M17 21h2a2 2 0 0 0 2-2v-2" />
+            <path d="M9 16V8" />
+            <path d="M12 19V5" />
+            <path d="M15 16V8" />
+          </svg>
+        </button>
+      </div>
       <div className="grid grid-cols-3 gap-3">
         {slice.map((p, i) => (
           <div
             key={p.photo_id ?? `${(page - 1) * perPage + i}`}
-            className="aspect-square border border-black bg-[#fafafa] overflow-hidden"
+            className="aspect-square border border-black bg-[#fafafa] overflow-hidden cursor-pointer"
+            onClick={() => {
+              setFullscreenIndex((page - 1) * perPage + i);
+              setFullscreenOpen(true);
+            }}
           >
             <img src={p.url} alt="" className="w-full h-full object-cover" />
           </div>
@@ -167,6 +211,58 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
               {n}
             </button>
           ))}
+        </div>
+      )}
+
+      {fullscreenOpen && photos[fullscreenIndex] && (
+        <div
+          className="fixed inset-0 z-[160] bg-black/92 flex items-center justify-center"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setFullscreenOpen(false);
+          }}
+        >
+          <div
+            className="max-w-[92vw] max-h-[88vh] flex items-center justify-center px-6"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              setDragStartX(e.clientX);
+            }}
+            onMouseUp={(e) => {
+              if (dragStartX === null) return;
+              const dx = e.clientX - dragStartX;
+              if (Math.abs(dx) < 56) {
+                setDragStartX(null);
+                return;
+              }
+              if (dx < 0 && fullscreenIndex < photos.length - 1) setFullscreenIndex((p) => p + 1);
+              if (dx > 0 && fullscreenIndex > 0) setFullscreenIndex((p) => p - 1);
+              setDragStartX(null);
+            }}
+          >
+            <img
+              src={photos[fullscreenIndex].url}
+              alt=""
+              className="max-h-[88vh] max-w-[92vw] object-contain select-none"
+              draggable={false}
+            />
+          </div>
+          {playbackQueue[playlistIndex] && (
+            <audio
+              key={`${playbackQueue[playlistIndex].id}-${playlistIndex}`}
+              src={playbackQueue[playlistIndex].url}
+              autoPlay
+              onEnded={() => {
+                setPlaylistIndex((prev) => (prev < playbackQueue.length - 1 ? prev + 1 : prev));
+              }}
+            />
+          )}
+          <div
+            className="absolute bottom-5 text-white/75 text-[12px]"
+            style={{ fontFamily: FONT_BODY, fontWeight: 400 }}
+          >
+            {fullscreenIndex + 1} / {photos.length}
+            {playbackQueue[playlistIndex] ? ` · now playing: ${playbackQueue[playlistIndex].title}` : ''}
+          </div>
         </div>
       )}
     </>

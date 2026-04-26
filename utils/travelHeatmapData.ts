@@ -2,7 +2,7 @@ const MS_DAY = 86400000;
 
 /** 与 Gallery 建筑条目兼容，避免从 App 循环依赖类型 */
 export type BuildingForHeatmap = {
-  photos: { file?: File; url?: string }[];
+  photos: { file?: File; url?: string; createdAt?: string }[];
   log: { date?: string };
   processedImage: unknown;
   isGenerating: boolean;
@@ -29,9 +29,17 @@ export function parseLogDate(s: string | undefined | null): { y: number; m: numb
   return { y, m: mo, d };
 }
 
+function parseIsoLikeDate(s: string | undefined | null): { y: number; m: number; d: number } | null {
+  if (!s || typeof s !== 'string') return null;
+  const dt = new Date(s);
+  if (Number.isNaN(dt.getTime())) return parseLogDate(s);
+  return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+}
+
 /**
  * 按自然日聚合「旅行照片」上传次数：
- * - 有 `file` 的照片：用 `lastModified` 所在本地日历日（在 year 内则计入）；
+ * - 有 `createdAt` 的照片：优先用它所在本地日历日；
+ * - 否则有 `file` 的照片：用 `lastModified` 所在本地日历日；
  * - 无 file 仅有 url：用建筑 `log.date` 所在日计 1；
  * - 无照片但有已生成抠图：用 `log.date` 计 1。
  */
@@ -48,7 +56,10 @@ export function aggregateUploadsByDay(images: BuildingForHeatmap[], year: number
     const trip = parseLogDate(img.log?.date);
 
     for (const p of img.photos) {
-      if (p.file && typeof p.file.lastModified === 'number') {
+      const created = parseIsoLikeDate(p.createdAt);
+      if (created) {
+        bump(created.y, created.m, created.d, 1);
+      } else if (p.file && typeof p.file.lastModified === 'number') {
         const dt = new Date(p.file.lastModified);
         bump(dt.getFullYear(), dt.getMonth() + 1, dt.getDate(), 1);
       } else if (trip && p.url) {

@@ -1,0 +1,24 @@
+{
+  "name": "Echo Map CN",
+  "short_name": "EchoMap",
+  "description": "A travel memory map optimized for mainland-friendly web deployment and future app packaging.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf7ee",
+  "theme_color": "#b7caf5",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/assets/echo-lighthouse-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/echo-lighthouse-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

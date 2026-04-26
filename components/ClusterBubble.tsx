@@ -13,10 +13,16 @@ export interface Cluster {
 interface ClusterBubbleProps {
   cluster: Cluster;
   map: any;
+  mapViewportTick?: number;
   onClick: (cluster: Cluster) => void;
 }
 
-export const ClusterBubble: React.FC<ClusterBubbleProps> = ({ cluster, map, onClick }) => {
+export const ClusterBubble: React.FC<ClusterBubbleProps> = ({
+  cluster,
+  map,
+  mapViewportTick: _mapViewportTick = 0,
+  onClick,
+}) => {
   const screenPoint = map.latLngToContainerPoint([cluster.lat, cluster.lng]);
   const representativeImage = cluster.representativeImage.processedImage;
   const SIZE = 80;

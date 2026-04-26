@@ -1,18 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocalization } from '../context/LocalizationContext';
+import { buildPlaceSearchUrl } from '../lib/deploymentConfig';
+import { parseSearchSuggestions, type SearchSuggestion } from '../lib/locationAdapters';
 
 const RECENT_KEY = 'echo_map_search_recent';
 const MAX_RECENT = 5;
+const SEARCH_BORDER_PX = 1.5;
 
 interface SearchControlProps {
   onLocationSelect: (lat: number, lng: number) => void;
-}
-
-interface Suggestion {
-  place_id: number;
-  display_name: string;
-  lat: string;
-  lon: string;
 }
 
 function readRecent(): string[] {
@@ -37,7 +33,7 @@ function writeRecent(q: string) {
 export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }) => {
   const { t, language } = useLocalization();
   const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [recent, setRecent] = useState<string[]>(() => readRecent());
   const [isActive, setIsActive] = useState(false);
 
@@ -50,12 +46,10 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
         return;
       }
       try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchTerm)}&accept-language=${language}&limit=5`
-        );
+        const response = await fetch(buildPlaceSearchUrl(searchTerm, language, 5));
         if (response.ok) {
           const data = await response.json();
-          setSuggestions(data);
+          setSuggestions(parseSearchSuggestions(data));
         }
       } catch (error) {
         console.error('Failed to fetch location suggestions', error);
@@ -82,15 +76,13 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
     if (showRecent) {
       return recent.map((text, i) => ({ type: 'recent' as const, text, key: `r-${i}` }));
     }
-    return suggestions.map((s) => ({ type: 'suggest' as const, s, key: String(s.place_id) }));
+    return suggestions.map((s) => ({ type: 'suggest' as const, s, key: s.key }));
   }, [showRecent, recent, suggestions]);
 
-  const handleSelect = (suggestion: Suggestion) => {
-    const lat = parseFloat(suggestion.lat);
-    const lng = parseFloat(suggestion.lon);
-    onLocationSelect(lat, lng);
-    writeRecent(suggestion.display_name);
-    setQuery(suggestion.display_name);
+  const handleSelect = (suggestion: SearchSuggestion) => {
+    onLocationSelect(suggestion.lat, suggestion.lng);
+    writeRecent(suggestion.label);
+    setQuery(suggestion.label);
     setSuggestions([]);
     setIsActive(false);
   };
@@ -108,11 +100,9 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
     }
     if (query.trim().length < 2) return;
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.trim())}&accept-language=${language}&limit=5`
-      );
+      const response = await fetch(buildPlaceSearchUrl(query.trim(), language, 5));
       if (response.ok) {
-        const data: Suggestion[] = await response.json();
+        const data = parseSearchSuggestions(await response.json());
         if (data[0]) handleSelect(data[0]);
       }
     } catch (e) {
@@ -122,6 +112,7 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
 
   return (
     <div
+      data-map-ui="search-control"
       className="absolute top-[4.25rem] left-1/2 -translate-x-1/2 z-30 px-2"
       style={{ width: 360, maxWidth: 'calc(100% - 16px)' }}
       onBlur={() => setTimeout(() => setIsActive(false), 120)}
@@ -131,7 +122,7 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
           type="button"
           onClick={handleSearch}
           className="w-11 shrink-0 p-2 text-black bg-white flex items-center justify-center hover:bg-gray-100 border border-black border-r-0 rounded-none"
-          style={{ height: 44, width: 44 }}
+          style={{ height: 44, width: 44, borderWidth: SEARCH_BORDER_PX, borderRightWidth: 0 }}
           aria-label={t('searchButton')}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -152,13 +143,16 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
           }}
           placeholder={t('searchPlaceholder')}
           className="flex-grow min-w-0 box-border px-[14px] border border-black bg-white text-black text-sm placeholder-neutral-600 focus:outline-none rounded-none"
-          style={{ height: 44, fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
+          style={{ height: 44, fontFamily: '"Roboto Mono", ui-monospace, monospace', borderWidth: SEARCH_BORDER_PX }}
           aria-label={t('searchPlaceholder')}
           autoComplete="off"
         />
       </div>
       {isActive && listToShow.length > 0 && (
-        <ul className="bg-white border border-black border-t-0 max-h-[200px] overflow-y-auto shadow-lg rounded-none">
+        <ul
+          className="bg-white border border-black border-t-0 max-h-[200px] overflow-y-auto shadow-lg rounded-none"
+          style={{ borderWidth: SEARCH_BORDER_PX, borderTopWidth: 0 }}
+        >
           {listToShow.map((item) =>
             item.type === 'recent' ? (
               <li
@@ -176,7 +170,7 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
                 style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
                 onMouseDown={() => handleSelect(item.s)}
               >
-                {item.s.display_name}
+                {item.s.label}
               </li>
             )
           )}

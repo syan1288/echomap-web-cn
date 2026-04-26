@@ -18,6 +18,17 @@ export interface PhotoData {
   url: string;
   file: File;
   photo_id?: string;
+  createdAt?: string;
+}
+
+export interface AudioEntry {
+  id: string;
+  kind: 'audio' | 'music';
+  title: string;
+  url: string;
+  createdAt: string;
+  source: 'recording' | 'upload' | 'builtin';
+  file?: File;
 }
 
 export interface ProcessedImage {
@@ -37,6 +48,7 @@ export interface ProcessedImage {
   flippedHorizontally?: boolean;
   isLocked?: boolean;
   photos: PhotoData[];
+  audioEntries: AudioEntry[];
   log: LogData;
   /** 生成时使用的建筑风格，用于再生成时沿用 */
   buildingStyle?: BuildingStyleId;

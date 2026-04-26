@@ -6,6 +6,7 @@ import { useLocalization } from '../context/LocalizationContext';
 interface ToolbarProps {
     selectedImage: ProcessedImage;
     map: any;
+    mapViewportTick?: number;
     onRegenerate: () => void;
     onFlip: () => void;
     onDuplicate: () => void;
@@ -18,6 +19,7 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = ({
     selectedImage,
     map,
+    mapViewportTick = 0,
     onRegenerate,
     onFlip,
     onDuplicate,
@@ -55,7 +57,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             transform: 'translateX(-50%)'
         });
 
-    }, [selectedImage.lat, selectedImage.lng, selectedImage.height, map, editText]); // Rerun when position or content changes
+    }, [selectedImage.lat, selectedImage.lng, selectedImage.height, map, editText, mapViewportTick]); // Rerun when map viewport changes
 
     const handleEdit = () => {
         const trimmed = editText.trim();
@@ -69,6 +71,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <div 
             ref={toolbarRef}
             className="absolute flex flex-col items-center gap-2" 
+            data-selection-overlay="toolbar"
             style={{ 
                 top: `${position.top}px`, 
                 left: `${position.left}px`, 

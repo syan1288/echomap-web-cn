@@ -4,18 +4,17 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#b7caf5" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Echo Map</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.19.1/mapbox-gl.css" rel="stylesheet">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Gasoek+One&family=Nunito:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Roboto:ital,wght@0,400;0,500;0,700;1,400;1,500&family=Roboto+Mono:wght@400;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""></script>
     <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
 
     <style>
@@ -23,9 +22,6 @@
         font-family: 'Plus Jakarta Sans', 'Helvetica Neue', system-ui, sans-serif;
         overflow-x: hidden;
         min-height: 100dvh;
-      }
-      .leaflet-control-attribution {
-        display: none !important; /* Hide for a cleaner prototype look */
       }
       @keyframes fadeInOut {
         0%, 100% { opacity: 0; transform: translateY(-20px) translateX(-50%); }
@@ -97,6 +93,38 @@
       .echo-cloud-meander {
         animation: echoCloudFloatMeander 15.6s ease-in-out infinite;
         animation-delay: -5.4s;
+      }
+      .mapboxgl-ctrl-bottom-left,
+      .mapboxgl-ctrl-bottom-right {
+        opacity: 0.42;
+        transform: scale(0.92);
+        transform-origin: left bottom;
+      }
+      .mapboxgl-ctrl-logo,
+      .mapboxgl-ctrl-attrib {
+        filter: grayscale(1);
+      }
+      .echo-atlas-base {
+        background:
+          radial-gradient(circle at 18% 16%, rgba(163, 196, 214, 0.16), transparent 24%),
+          radial-gradient(circle at 77% 22%, rgba(173, 199, 220, 0.11), transparent 20%),
+          radial-gradient(circle at 66% 68%, rgba(150, 188, 210, 0.11), transparent 22%),
+          radial-gradient(circle at 34% 76%, rgba(183, 202, 245, 0.08), transparent 18%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 241, 227, 0.92));
+      }
+      .echo-atlas-graticule {
+        background-image:
+          linear-gradient(rgba(103, 124, 144, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(103, 124, 144, 0.08) 1px, transparent 1px);
+        background-size: 72px 72px, 72px 72px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.48));
+      }
+      .echo-atlas-vignette {
+        background:
+          radial-gradient(circle at center, transparent 52%, rgba(231, 223, 205, 0.34) 100%);
+      }
+      .echo-map-shell {
+        transition: opacity 180ms ease-out;
       }
     </style>
 <script type="importmap">
