@@ -1,0 +1,17 @@
+[Unit]
+Description=EchoMap API service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/echomap-web-cn
+Environment=HOST=127.0.0.1
+Environment=PORT=3001
+EnvironmentFile=/home/ubuntu/apps/echomap-web-cn/.env
+ExecStart=/usr/bin/npm run api:start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

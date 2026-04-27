@@ -81,6 +81,67 @@ chmod +x deploy/deploy-frontend.sh
 - `Nginx` 把 `/` 反代到前端容器
 - `Nginx` 再把 `/api/` 反代到独立 API 服务
 
+## 同域 API 部署
+
+仓库现在提供了一个常驻 Node API 入口：
+
+```bash
+npm run api:start
+```
+
+默认监听：
+
+- `HOST=127.0.0.1`
+- `PORT=3001`
+
+可用接口：
+
+- `GET /api/echo-health`
+- `POST /api/geocode`
+- `POST /api/generate`
+
+### 推荐线上方式：systemd
+
+仓库已附带示例服务文件：
+
+- [deploy/echomap-api.service.example](/Users/athena.xu/data-project/design/echomap-web-cn/deploy/echomap-api.service.example:1)
+- [deploy/deploy-api.sh](/Users/athena.xu/data-project/design/echomap-web-cn/deploy/deploy-api.sh:1)
+
+服务器上可以按这个流程启用：
+
+```bash
+cd /home/ubuntu/apps/echomap-web-cn
+npm install
+
+sudo cp deploy/echomap-api.service.example /etc/systemd/system/echomap-api.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now echomap-api
+sudo systemctl status echomap-api
+```
+
+或者直接：
+
+```bash
+chmod +x deploy/deploy-api.sh
+./deploy/deploy-api.sh
+```
+
+确认健康检查：
+
+```bash
+curl http://127.0.0.1:3001/api/echo-health
+```
+
+只要你的 Nginx 里已有：
+
+```nginx
+location /api/ {
+  proxy_pass http://127.0.0.1:3001;
+}
+```
+
+就能把正式域名下的 `/api/*` 接通。
+
 可以参考：
 
 - [deploy/nginx.conf](/Users/athena.xu/data-project/design/echomap-web-cn/deploy/nginx.conf:1)
