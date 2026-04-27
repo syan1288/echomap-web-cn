@@ -362,7 +362,7 @@ const App: React.FC = () => {
   const [showLogModal, setShowLogModal] = useState(false);
   const [showMemoryPhotoModal, setShowMemoryPhotoModal] = useState(false);
   const [showMemoryAudioModal, setShowMemoryAudioModal] = useState(false);
-  const [imageProvider, setImageProvider] = useState<ImageProvider>('gemini');
+  const [imageProvider, setImageProvider] = useState<ImageProvider>('jimeng');
   const [isLoading, setIsLoading] = useState<{ active: boolean; message: string } | null>(null);
 
   const [echoTab, setEchoTab] = useState<'home' | 'gallery'>('home');
