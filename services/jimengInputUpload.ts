@@ -3,6 +3,14 @@ import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 const BUCKET = 'buildings';
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
+function makeObjectId(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+    return cryptoApi.randomUUID();
+  }
+  return `jimeng-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function fileExt(file: File): string {
   const byName = file.name.split('.').pop()?.trim().toLowerCase();
   if (byName) return byName.slice(0, 8);
@@ -24,7 +32,7 @@ export async function uploadImageAndCreateJimengUrl(file: File): Promise<string>
     throw new Error('使用即梦 4.6 前请先登录，以便上传参考图并生成临时访问链接。');
   }
 
-  const objectPath = `${user.id}/jimeng-inputs/${crypto.randomUUID()}.${fileExt(file)}`;
+  const objectPath = `${user.id}/jimeng-inputs/${makeObjectId()}.${fileExt(file)}`;
   const { error: uploadError } = await supabase.storage.from(BUCKET).upload(objectPath, file, {
     upsert: false,
     contentType: file.type || 'image/jpeg',
