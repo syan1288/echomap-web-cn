@@ -72,6 +72,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             ref={toolbarRef}
             className="absolute flex flex-col items-center gap-2" 
             data-selection-overlay="toolbar"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             style={{ 
                 top: `${position.top}px`, 
                 left: `${position.left}px`, 

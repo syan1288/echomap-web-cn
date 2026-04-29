@@ -1414,18 +1414,20 @@ const App: React.FC = () => {
   
   const handleLockSelected = async () => {
     if (!selectedImage) return;
-    await ensureAudioContext();
-    synth.triggerAttackRelease('E5', '8n');
     const updated = { ...selectedImage, isLocked: true };
     setImages(prev => prev.map(img => img.id === selectedImageId ? updated : img));
+    void ensureAudioContext()
+      .then(() => synth.triggerAttackRelease('E5', '8n'))
+      .catch((error) => console.warn('lock audio skipped', error));
     void persistCloudImage(updated);
   };
 
   const handleUnlockSelected = async () => {
     if (!selectedImage) return;
-    await ensureAudioContext();
-    synth.triggerAttackRelease('C5', '8n');
     setImages(prev => prev.map(img => img.id === selectedImageId ? { ...img, isLocked: false } : img));
+    void ensureAudioContext()
+      .then(() => synth.triggerAttackRelease('C5', '8n'))
+      .catch((error) => console.warn('unlock audio skipped', error));
   };
   
   const handleViewPhoto = (photoIndex: number) => {
