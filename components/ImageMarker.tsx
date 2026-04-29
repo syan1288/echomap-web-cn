@@ -107,7 +107,6 @@ const ImageMarkerComponent: React.FC<ImageMarkerProps> = ({
             onMouseEnter={() => onHoverChange?.(img.id)}
             onMouseLeave={() => onHoverChange?.(null)}
             onClick={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}

@@ -65,7 +65,6 @@ export const PoiDotMarker: React.FC<PoiDotMarkerProps> = ({
         cursor: 'pointer',
       }}
       onPointerDown={(e) => onInteractionStart(e, img)}
-      onPointerUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onMouseEnter={() => onHoverChange?.(img.id)}
       onMouseLeave={() => onHoverChange?.(null)}
