@@ -627,8 +627,19 @@ function isBuildingStyleId(s: string | undefined | null): s is BuildingStyleId {
 }
 
 function buildEchoImageSystemInstruction(style: BuildingStyleId = DEFAULT_BUILDING_STYLE): string {
-  void style;
-  return '仅针对图中主体建筑，创建一个3D 等距视角建筑。建筑应被单独分离，无任何背景，无阴影，png。';
+  const base =
+    '仅针对图中主体建筑，创建单体建筑立绘。构图为干净的等距/3D 视角，建筑主体完整，透明背景，无地面、无天空、无人物、无植被、无阴影、无边框，输出 png。整体必须像可收藏的旅行地标建筑插画，而不是儿童画、玩具、贴纸、Q版摆件或卡通表情。颜色克制，避免高饱和霓虹糖果色，避免幼态、廉价、花哨。';
+  switch (style) {
+    case 'pixel':
+      return `${base} 风格额外约束：像素风必须是真正的像素建筑立绘，边缘清晰，像素块明确，限制色盘，避免平滑渐变、模糊、发光特效和手游儿童皮肤感。`;
+    case 'ink':
+      return `${base} 风格额外约束：水墨风必须保留建筑结构识别度，以白描线稿和低饱和墨色/淡彩为主，留白克制，避免鲜艳儿童插画配色。`;
+    case 'healing':
+      return `${base} 风格额外约束：治愈绘本风应安静、成熟、柔和，像旅行随笔插画，不要幼儿园绘本、卡通吉祥物或高饱和可爱风。`;
+    case 'flat':
+    default:
+      return `${base} 风格额外约束：扁平插画风应更像编辑插画/品牌插画，几何块面清晰，颜色克制，不要儿童简笔画、廉价卡通或高饱和贴纸风。`;
+  }
 }
 
 function buildInitialUserPrompt(buildingName?: string): string {
@@ -638,27 +649,27 @@ function buildInitialUserPrompt(buildingName?: string): string {
 function buildUserStyleReminder(style: BuildingStyleId): string {
   switch (style) {
     case 'pixel':
-      return '32-bit pixel art, featuring chunky square pixels with clear edges. Use clearly visible chunky 32 px blocks. Strictly flat color blocks: no blur, no outlines, no gradients on pixel objects.';
+      return '精致等距像素建筑风。像素块必须清晰可见，结构规整，限制色盘，偏旅行游戏地图资产质感。禁止平滑渐变、模糊、厚涂、Q版玩具感、荧光高饱和儿童手游皮肤风。';
     case 'ink':
-      return 'ink wash，baimiao, highly detailed，vibrant but elegant colors';
+      return '水墨白描建筑风。以墨线、淡墨、极低饱和矿物淡彩为主，强调建筑轮廓、屋顶、窗洞和体块关系，气质克制安静。禁止高饱和儿童插画配色、可爱卡通脸、贴纸感。';
     case 'healing':
-      return '治愈绘本插画风，线条随性松散，marker sketch+ charcoal 质感';
+      return '治愈旅行绘本插画风。柔和、低饱和、纸面质感，像成熟旅行手账或杂志插画；可以有轻微彩铅/蜡笔/水粉肌理，但建筑结构要准。禁止幼态儿童画、糖果色、玩具摆件感。';
     case 'flat':
     default:
-      return '扁平插画风，svg（300dpi），细节清晰';
+      return '高级扁平建筑插画风。几何块面清晰、边缘干净、配色克制偏杂志编辑插画，适合地图地标收藏。禁止儿童简笔画、过亮高饱和、表情贴纸、廉价卡通风。';
   }
 }
 
 function buildInitialUserPromptWithStyle(buildingName: string | undefined, style: BuildingStyleId): string {
   const trimmed = buildingName?.trim();
   return trimmed
-    ? `建筑名称参考：${trimmed}。风格要求：${buildUserStyleReminder(style)}`
-    : `风格要求：${buildUserStyleReminder(style)}`;
+    ? `建筑名称参考：${trimmed}。请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`
+    : `请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`;
 }
 
 function buildEditUserPrompt(editInstruction: string, buildingName?: string, style: BuildingStyleId = DEFAULT_BUILDING_STYLE): string {
   const extra = buildingName?.trim() ? ` 建筑名称参考：${buildingName.trim()}。` : '';
-  return `${editInstruction.trim()}${extra} 风格要求：${buildUserStyleReminder(style)}`.trim();
+  return `${editInstruction.trim()}${extra} 请保留原建筑的可识别地标特征，只在现有结构上调整。风格要求：${buildUserStyleReminder(style)}`.trim();
 }
 
 function extractInlineImageFromResponse(response: {
