@@ -9,7 +9,7 @@ interface PoiDotMarkerProps {
   mapViewportTick?: number;
   isSelected: boolean;
   basemapTheme: BasemapThemeId;
-  onInteractionStart: (e: React.MouseEvent<HTMLDivElement>, img: ProcessedImage) => void;
+  onInteractionStart: (e: React.PointerEvent<HTMLDivElement>, img: ProcessedImage) => void;
   onHoverChange?: (id: number | null) => void;
 }
 
@@ -64,7 +64,9 @@ export const PoiDotMarker: React.FC<PoiDotMarkerProps> = ({
         willChange: 'transform',
         cursor: 'pointer',
       }}
-      onMouseDown={(e) => onInteractionStart(e, img)}
+      onPointerDown={(e) => onInteractionStart(e, img)}
+      onPointerUp={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
       onMouseEnter={() => onHoverChange?.(img.id)}
       onMouseLeave={() => onHoverChange?.(null)}
       aria-hidden

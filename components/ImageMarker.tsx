@@ -9,7 +9,7 @@ interface ImageMarkerProps {
     isDragging: boolean;
     animationTick: number;
     previewImageCache: React.MutableRefObject<Record<number, HTMLImageElement>>;
-    onInteractionStart: (e: React.MouseEvent<HTMLDivElement>, img: ProcessedImage) => void;
+    onInteractionStart: (e: React.PointerEvent<HTMLDivElement>, img: ProcessedImage) => void;
     onAddPhotoToMemory: (memoryId: number, file: File) => void;
     onHoverChange?: (id: number | null) => void;
     /** 随地图 zoom 缩放占位尺寸（约 0.35–1.15） */
@@ -103,9 +103,11 @@ const ImageMarkerComponent: React.FC<ImageMarkerProps> = ({
                 willChange: 'transform',
                 cursor: img.isLocked ? 'pointer' : 'grab'
             }}
-            onMouseDown={(e) => onInteractionStart(e, img)}
+            onPointerDown={(e) => onInteractionStart(e, img)}
             onMouseEnter={() => onHoverChange?.(img.id)}
             onMouseLeave={() => onHoverChange?.(null)}
+            onClick={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
