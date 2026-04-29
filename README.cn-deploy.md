@@ -152,6 +152,19 @@ location /api/ {
 `.env` 里优先关注这些：
 
 ```bash
+OPENAI_API_KEY=your_openai_key
+OPENAI_BASE_URL=
+# 可选；默认 chatgpt-image-latest
+OPENAI_IMAGE_MODEL=chatgpt-image-latest
+# 可选；默认省钱档 1024x1024 + medium
+OPENAI_IMAGE_SIZE=1024x1024
+OPENAI_IMAGE_QUALITY=medium
+# APIMart gpt-image-2 默认分辨率档位
+OPENAI_IMAGE_RESOLUTION=1k
+JIMENG_ACCESS_KEY_ID=your_jimeng_access_key_id
+JIMENG_SECRET_ACCESS_KEY=your_jimeng_secret_access_key
+GEMINI_API_KEY=your_gemini_key
+
 VITE_APP_VARIANT=cn
 VITE_AMAP_WEB_KEY=your_amap_key
 VITE_AMAP_JS_KEY=your_amap_js_key
@@ -170,6 +183,12 @@ VITE_MAPBOX_STYLE=mapbox://styles/mapbox/standard
 # VITE_REVERSE_GEOCODE_TEMPLATE=
 # VITE_IP_GEO_URL=
 ```
+
+- 当前产品默认出图 provider 仍是 **即梦**；OpenAI 的 `ChatGPT 图像 2.0` 会作为可选模型保留在侧边栏里。
+- 填入 `OPENAI_API_KEY` 后，侧边栏的 `ChatGPT 图像 2.0` 会直接走 `/api/generate -> OpenAI images/edits` 这条现有链路。
+- 若你用 APIMart 这类 OpenAI 兼容网关，额外填写 `OPENAI_BASE_URL=https://api.apimart.ai/v1`。
+- 若 `OPENAI_BASE_URL=https://api.apimart.ai/v1`，后端会自动把同一个 `ChatGPT 图像 2.0` 入口切到 APIMart 的 `gpt-image-2` 异步任务流，默认固定 `size=1:1`、`resolution=1k`、`n=1`，图生图继续传 `image_urls`，并保留现有建筑风格 prompt。
+- 若前端和 API 分离部署，记得把这些 AI 环境变量配在独立 API 服务上，而不是只配在静态前端机器上。
 
 ## 当前高德版行为
 

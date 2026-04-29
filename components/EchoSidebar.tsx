@@ -13,10 +13,12 @@ const PANEL_STACK = `
 `;
 
 const MODEL_OPTIONS = [
-  { id: 'gemini', label: 'Gemini' },
-  { id: 'gpt-image-2', label: 'GPT Image 2' },
   { id: 'jimeng', label: '即梦' },
+  { id: 'gemini', label: 'Gemini' },
+  { id: 'chatgpt-image', label: 'GhatGPT-image-2.0' },
 ] as const;
+
+type ImageProvider = (typeof MODEL_OPTIONS)[number]['id'];
 
 const IconSparkles: React.FC = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -113,8 +115,9 @@ export interface EchoSidebarProps {
   galleryStatsSlot: React.ReactNode;
   /** 侧栏底部固定区（如云端登录） */
   footerSlot?: React.ReactNode;
-  imageProvider: 'gemini' | 'jimeng' | 'gpt-image-2';
-  onImageProviderChange: (provider: 'gemini' | 'jimeng' | 'gpt-image-2') => void;
+  imageProvider: ImageProvider;
+  imageProviderAvailability?: Partial<Record<ImageProvider, boolean>> | null;
+  onImageProviderChange: (provider: ImageProvider) => void;
 }
 
 export const EchoSidebar: React.FC<EchoSidebarProps> = ({
@@ -125,6 +128,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
   galleryStatsSlot,
   footerSlot,
   imageProvider,
+  imageProviderAvailability,
   onImageProviderChange,
 }) => {
   const { user, signOut } = useAuth();
@@ -280,6 +284,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                   type="button"
                   className="w-full rounded-none border-0 bg-transparent px-1 py-1.5 text-left text-[13px] text-[#111] cursor-pointer hover:bg-black/5 flex items-center justify-between"
                   style={{ fontFamily: FONT_GOOGLE_SANS, fontWeight: 400 }}
+                  onClick={() => setModelHover((v) => !v)}
                   onMouseEnter={keepModelMenuOpen}
                   onMouseLeave={scheduleModelMenuClose}
                 >
@@ -312,7 +317,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                   >
                     {MODEL_OPTIONS.map((item) => {
                       const selected = imageProvider === item.id;
-                      const disabled = item.id === 'gpt-image-2';
+                      const disabled = imageProviderAvailability?.[item.id] === false;
                       return (
                         <button
                           key={item.id}
@@ -328,13 +333,13 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                           }}
                           onClick={() => {
                             if (disabled) return;
-                            onImageProviderChange(item.id as 'gemini' | 'jimeng' | 'gpt-image-2');
+                            onImageProviderChange(item.id);
                             setMenuOpen(false);
                             setModelHover(false);
                           }}
                         >
                           {item.id === 'gemini' && <GeminiBrandIcon />}
-                          {item.id === 'gpt-image-2' && <OpenAIBrandIcon />}
+                          {item.id === 'chatgpt-image' && <OpenAIBrandIcon />}
                           {item.id === 'jimeng' && <JimengBrandIcon />}
                           <span>{item.label}</span>
                         </button>
@@ -434,13 +439,13 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
       )}
 
       {footerSlot && !collapsed && !user && (
-        <div className="absolute left-5 right-5 bottom-5 z-[5] border-t border-black/10 pt-3">
+        <div className="absolute left-5 right-5 bottom-5 z-[5] border-t border-black/10 pt-3" style={{ bottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
           {footerSlot}
         </div>
       )}
 
       {user && !collapsed && (
-        <div className="absolute left-5 bottom-5 z-[5]">
+        <div className="absolute left-5 bottom-5 z-[5]" style={{ bottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
           {menuOpen && (
             <div
               className="absolute bottom-[62px] left-0 min-w-[220px] rounded-none bg-white px-3 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
@@ -451,6 +456,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                 type="button"
                 className="w-full rounded-none border-0 bg-transparent px-1 py-1.5 text-left text-[13px] text-[#111] cursor-pointer hover:bg-black/5 flex items-center justify-between"
                 style={{ fontFamily: FONT_GOOGLE_SANS, fontWeight: 400 }}
+                onClick={() => setModelHover((v) => !v)}
                 onMouseEnter={keepModelMenuOpen}
                 onMouseLeave={scheduleModelMenuClose}
               >
@@ -483,7 +489,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                 >
                   {MODEL_OPTIONS.map((item) => {
                     const selected = imageProvider === item.id;
-                    const disabled = item.id === 'gpt-image-2';
+                    const disabled = imageProviderAvailability?.[item.id] === false;
                     return (
                       <button
                         key={item.id}
@@ -499,13 +505,13 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                         }}
                         onClick={() => {
                           if (disabled) return;
-                          onImageProviderChange(item.id as 'gemini' | 'jimeng' | 'gpt-image-2');
+                          onImageProviderChange(item.id);
                           setMenuOpen(false);
                           setModelHover(false);
                         }}
                       >
                         {item.id === 'gemini' && <GeminiBrandIcon />}
-                        {item.id === 'gpt-image-2' && <OpenAIBrandIcon />}
+                        {item.id === 'chatgpt-image' && <OpenAIBrandIcon />}
                         {item.id === 'jimeng' && <JimengBrandIcon />}
                         <span>{item.label}</span>
                       </button>

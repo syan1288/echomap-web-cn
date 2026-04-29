@@ -33,6 +33,7 @@ import type { AudioEntry, LogData, PhotoData, ProcessedImage } from './types/mem
 import { useAuth } from './context/AuthContext';
 import {
   loadAllCloudBuildings,
+  saveBuildingToCloud,
   deleteBuildingFromCloud,
   isSupabaseConfigured,
 } from './services/cloudBuildings';
@@ -83,7 +84,8 @@ const CLUSTER_RADIUS_PX = 90;
 /** 小于等于该 zoom 时地图仅显示黑色 POI 圆点，不显示建筑立绘 */
 const POI_DOT_ZOOM_THRESHOLD = 5;
 const MAP_ICON_BORDER_PX = 1.5;
-type ImageProvider = 'gemini' | 'jimeng' | 'gpt-image-2';
+type ImageProvider = 'gemini' | 'jimeng' | 'chatgpt-image';
+type ImageProviderAvailability = Partial<Record<ImageProvider, boolean>>;
 
 /** Demo landmarks (locked). Set to false to start with an empty map. */
 const ECHO_SEED_DEMO_BUILDINGS = false;
@@ -101,6 +103,39 @@ interface ImageProcessingResult {
 interface PhotoPreviewState {
     photos: PhotoData[];
     currentIndex: number;
+}
+
+function buildCloudSyncSignature(img: ProcessedImage): string | null {
+  if (!img.processedImage || img.isGenerating) return null;
+  return JSON.stringify({
+    lat: img.lat,
+    lng: img.lng,
+    width: img.width,
+    height: img.height,
+    flippedHorizontally: Boolean(img.flippedHorizontally),
+    isLocked: Boolean(img.isLocked),
+    buildingStyle: img.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+    contentBounds: img.contentBounds,
+    sourceFileName: img.sourceFile?.name ?? null,
+    photos: img.photos.map((photo) => ({
+      name: photo.file.name,
+      size: photo.file.size,
+      type: photo.file.type,
+      createdAt: photo.createdAt ?? null,
+      photo_id: photo.photo_id ?? null,
+    })),
+    audioEntries: img.audioEntries.map((entry) => ({
+      id: entry.id,
+      kind: entry.kind,
+      title: entry.title,
+      createdAt: entry.createdAt,
+      source: entry.source,
+      fileName: entry.file?.name ?? null,
+      fileSize: entry.file?.size ?? null,
+      url: entry.source === 'builtin' ? entry.url : null,
+    })),
+    log: img.log,
+  });
 }
 
 // --- HELPER FUNCTIONS ---
@@ -346,6 +381,9 @@ const App: React.FC = () => {
   const nextId = useRef(0);
   const previewImageCache = useRef<Record<number, HTMLImageElement>>({});
   const prevImagesRef = useRef<ProcessedImage[]>([]);
+  const latestImagesRef = useRef<ProcessedImage[]>([]);
+  const cloudSavedSignatureRef = useRef<Map<number, string>>(new Map());
+  const cloudSaveInFlightRef = useRef<Set<number>>(new Set());
   const [animationTick, setAnimationTick] = useState(0);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
@@ -377,6 +415,33 @@ const App: React.FC = () => {
   const emptyHintVisibleRef = useRef(false);
   const passiveDismissUnlockAtRef = useRef(0);
 
+  const persistCloudImage = useCallback(
+    async (img: ProcessedImage, options?: { requireLocked?: boolean }) => {
+      const uid = user?.id;
+      if (!uid || !isSupabaseConfigured) return;
+      if (options?.requireLocked && !img.isLocked && !img.cloudId) return;
+
+      const signature = buildCloudSyncSignature(img);
+      if (!signature) return;
+      if (cloudSavedSignatureRef.current.get(img.id) === signature) return;
+      if (cloudSaveInFlightRef.current.has(img.id)) return;
+
+      cloudSaveInFlightRef.current.add(img.id);
+      try {
+        const cloudId = await saveBuildingToCloud(img, uid);
+        cloudSavedSignatureRef.current.set(img.id, signature);
+        setImages((prev) =>
+          prev.map((entry) => (entry.id === img.id ? { ...entry, cloudId } : entry))
+        );
+      } catch (error) {
+        console.error('cloud autosave failed', error);
+      } finally {
+        cloudSaveInFlightRef.current.delete(img.id);
+      }
+    },
+    [user?.id]
+  );
+
   const mapRef = useRef<any | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
@@ -389,6 +454,7 @@ const App: React.FC = () => {
   const [showBasemapMenu, setShowBasemapMenu] = useState(false);
   /** 仅开发：检测 Vite 中间件 /api 是否可达与生成凭证 */
   const [devEchoApiHint, setDevEchoApiHint] = useState<string | null>(null);
+  const [imageProviderAvailability, setImageProviderAvailability] = useState<ImageProviderAvailability | null>(null);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -403,12 +469,32 @@ const App: React.FC = () => {
           );
           return;
         }
-        const j = (await r.json()) as { generateConfigured?: boolean };
+        const j = (await r.json()) as {
+          generateConfigured?: boolean;
+          providers?: Partial<Record<ImageProvider, boolean>>;
+          env?: {
+            hasGeminiApiKey?: boolean;
+            hasOpenAiKey?: boolean;
+            hasJimengKeys?: boolean;
+            hasGoogleCloudProject?: boolean;
+            hasGoogleApplicationCredentials?: boolean;
+          };
+        };
+        const inferredProviders: ImageProviderAvailability = {
+          gemini:
+            j.providers?.gemini ??
+            Boolean(j.env?.hasGeminiApiKey || (j.env?.hasGoogleCloudProject && j.env?.hasGoogleApplicationCredentials)),
+          'chatgpt-image': j.providers?.['chatgpt-image'] ?? Boolean(j.env?.hasOpenAiKey),
+          jimeng: j.providers?.jimeng ?? Boolean(j.env?.hasJimengKeys),
+        };
+        setImageProviderAvailability(inferredProviders);
         if (!j.generateConfigured) {
           setDevEchoApiHint(
-            'DEV: 未配置 GEMINI_API_KEY 或 Vertex（.env）。地名搜索仍可用；3D 生成会失败直至配置密钥。'
+            'DEV: 未配置 Gemini / OpenAI / 即梦任一出图凭证（.env）。地名搜索仍可用；3D 生成会失败直至补齐至少一种。'
           );
+          return;
         }
+        setDevEchoApiHint(null);
       } catch {
         if (!cancelled) {
           setDevEchoApiHint('DEV: 无法连接本地 API。请在 echomap-web 下运行 npm run dev。');
@@ -419,6 +505,17 @@ const App: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!imageProviderAvailability) return;
+    if (imageProviderAvailability[imageProvider] !== false) return;
+    const fallback = (['jimeng', 'gemini', 'chatgpt-image'] as const).find(
+      (provider) => imageProviderAvailability[provider]
+    );
+    if (fallback && fallback !== imageProvider) {
+      setImageProvider(fallback);
+    }
+  }, [imageProvider, imageProviderAvailability]);
 
   const selectedImage = useMemo(() =>
     selectedImageId !== null ? images.find(img => img.id === selectedImageId) : null,
@@ -996,19 +1093,27 @@ const App: React.FC = () => {
         const url = URL.createObjectURL(file);
         const photoId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `photo-${memoryId}-${Date.now()}`;
         const newPhoto: PhotoData = { file, url, photo_id: photoId, createdAt: new Date().toISOString() };
+        const current = latestImagesRef.current.find((img) => img.id === memoryId);
+        if (!current) return;
+        const updated = { ...current, photos: [...current.photos, newPhoto] };
         setImages(prev => prev.map(img => img.id === memoryId
-            ? { ...img, photos: [...img.photos, newPhoto] }
+            ? updated
             : img
         ));
+        void persistCloudImage(updated, { requireLocked: true });
     }
-  }, [t]);
+  }, [t, persistCloudImage]);
 
   const handleSaveAudioEntriesToMemory = useCallback((memoryId: number, entries: AudioEntry[]) => {
+    const current = latestImagesRef.current.find((img) => img.id === memoryId);
+    if (!current) return;
+    const updated = { ...current, audioEntries: entries };
     setImages((prev) =>
-      prev.map((img) => (img.id === memoryId ? { ...img, audioEntries: entries } : img))
+      prev.map((img) => (img.id === memoryId ? updated : img))
     );
+    void persistCloudImage(updated, { requireLocked: true });
     setShowMemoryAudioModal(false);
-  }, []);
+  }, [persistCloudImage]);
 
   const handleDeletePhotoFromMemory = useCallback(
     async (memoryId: number, photoIndex: number) => {
@@ -1039,10 +1144,12 @@ const App: React.FC = () => {
         }
 
         const updatedPhotos = memory.photos.filter((_, idx) => idx !== photoIndex);
-        return prev.map((img) => (img.id === memoryId ? { ...img, photos: updatedPhotos } : img));
+        const updated = { ...memory, photos: updatedPhotos };
+        void persistCloudImage(updated, { requireLocked: true });
+        return prev.map((img) => (img.id === memoryId ? updated : img));
       });
     },
-    [selectedImageId, images, user?.id]
+    [selectedImageId, images, user?.id, persistCloudImage]
   );
 
   useEffect(() => {
@@ -1064,8 +1171,9 @@ const App: React.FC = () => {
     return () => document.removeEventListener('paste', handlePaste);
   }, [startImagePlacement]);
 
-  const handleInteractionStart = (e: React.MouseEvent<HTMLDivElement>, targetImage: ProcessedImage) => {
+  const handleInteractionStart = (e: React.PointerEvent<HTMLDivElement>, targetImage: ProcessedImage) => {
     e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
 
     if (selectedImageId !== targetImage.id) {
         setSelectedImageId(targetImage.id);
@@ -1084,7 +1192,7 @@ const App: React.FC = () => {
     setImages(prev => [...prev.filter(img => img.id !== targetImage.id), targetImage]);
   };
 
-  const handleInteractionMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleInteractionMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (draggingImage && mapRef.current) {
         const startPoint = mapRef.current.latLngToContainerPoint([draggingImage.startLat, draggingImage.startLng]);
         const newPoint = { x: startPoint.x + (e.clientX - draggingImage.startX), y: startPoint.y + (e.clientY - draggingImage.startY) };
@@ -1135,6 +1243,7 @@ const App: React.FC = () => {
   }, [images]);
 
   useEffect(() => {
+    latestImagesRef.current = images;
     const currentUrls = new Set(images.flatMap(i => i.photos.map(p => p.url)));
     const prevUrls = new Set(prevImagesRef.current.flatMap(i => i.photos.map(p => p.url)));
     
@@ -1158,9 +1267,10 @@ const App: React.FC = () => {
                 await ensureAudioContext();
                 synth.triggerAttackRelease('C5', '8n');
             })();
+            void persistCloudImage(img, { requireLocked: true });
         }
     });
-  }, [images]);
+  }, [images, persistCloudImage]);
 
   /** 登录后自动从云端加载地图（关闭手动 push/pull 交互） */
   useEffect(() => {
@@ -1179,6 +1289,14 @@ const App: React.FC = () => {
         });
         const maxId = loaded.reduce((m, i) => Math.max(m, i.id), 0);
         nextId.current = Math.max(nextId.current, maxId + 1);
+        cloudSavedSignatureRef.current = new Map(
+          loaded
+            .map((img) => {
+              const signature = buildCloudSyncSignature(img);
+              return signature ? ([img.id, signature] as const) : null;
+            })
+            .filter((entry): entry is readonly [number, string] => entry !== null)
+        );
         setImages(loaded);
         setSelectedImageId(null);
         setToastMessage(t('cloudPullOk'));
@@ -1188,7 +1306,7 @@ const App: React.FC = () => {
       }
     })();
   }, [user?.id, t]);
-  
+
   useEffect(() => {
       if (toastMessage) {
           const timer = setTimeout(() => {
@@ -1298,7 +1416,9 @@ const App: React.FC = () => {
     if (!selectedImage) return;
     await ensureAudioContext();
     synth.triggerAttackRelease('E5', '8n');
-    setImages(prev => prev.map(img => img.id === selectedImageId ? { ...img, isLocked: true } : img));
+    const updated = { ...selectedImage, isLocked: true };
+    setImages(prev => prev.map(img => img.id === selectedImageId ? updated : img));
+    void persistCloudImage(updated);
   };
 
   const handleUnlockSelected = async () => {
@@ -1334,21 +1454,22 @@ const App: React.FC = () => {
   
   const handleSaveLog = (updatedLog: LogData) => {
       if (selectedImageId === null) return;
-      setImages(prev => prev.map(img => {
-          if (img.id !== selectedImageId) return img;
-          const memId =
-            updatedLog.memory_id ??
-            img.log.memory_id ??
-            (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mem-${img.id}`);
-          return {
-            ...img,
-            log: {
-              ...updatedLog,
-              memory_id: memId,
-              landmark_id: img.id,
-            },
-          };
-      }));
+      const current = latestImagesRef.current.find((img) => img.id === selectedImageId);
+      if (!current) return;
+      const memId =
+        updatedLog.memory_id ??
+        current.log.memory_id ??
+        (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mem-${current.id}`);
+      const updated = {
+        ...current,
+        log: {
+          ...updatedLog,
+          memory_id: memId,
+          landmark_id: current.id,
+        },
+      };
+      setImages(prev => prev.map(img => img.id === selectedImageId ? updated : img));
+      void persistCloudImage(updated, { requireLocked: true });
       setShowLogModal(false);
   };
 
@@ -1815,7 +1936,7 @@ const App: React.FC = () => {
   );
 
   const handleMapSurfacePointerDown = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.PointerEvent<HTMLDivElement>) => {
       if (!selectedImage || !selectedImage.isLocked) return;
       const target = e.target as HTMLElement | null;
       if (!target) return;
@@ -1845,6 +1966,7 @@ const App: React.FC = () => {
           activeTab={echoTab}
           onNavigate={handleEchoNavigate}
           imageProvider={imageProvider}
+          imageProviderAvailability={imageProviderAvailability}
           onImageProviderChange={setImageProvider}
           statsFade={statsFade}
           homeStatusSlot={homeStatusSlot}
@@ -1866,21 +1988,22 @@ const App: React.FC = () => {
           aria-label="Map"
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
-          onMouseMove={handleInteractionMove}
-          onMouseUp={handleInteractionEnd}
-          onMouseLeave={handleInteractionEnd}
+          onPointerMove={handleInteractionMove}
+          onPointerUp={handleInteractionEnd}
+          onPointerCancel={handleInteractionEnd}
+          onPointerLeave={handleInteractionEnd}
         >
         <div
           className="relative flex min-h-0 w-full flex-1 overflow-hidden"
-          onMouseDownCapture={handleMapSurfacePointerDown}
+          onPointerDownCapture={handleMapSurfacePointerDown}
         >
-        <div className="absolute top-4 right-4 z-[60] flex items-center gap-2 pointer-events-auto">
+        <div className="absolute top-4 right-4 z-[60] flex items-center gap-2 pointer-events-auto" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowBasemapMenu((open) => !open)}
               data-map-ui="basemap-theme"
-              className="w-7 h-7 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+              className="w-11 h-11 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Change basemap theme"
             >
@@ -1924,7 +2047,7 @@ const App: React.FC = () => {
               mapRef.current.setView([a.lat, a.lng], Math.max(6, mapRef.current.getZoom()));
             }}
             data-map-ui="back-to-location"
-            className="w-7 h-7 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+              className="w-11 h-11 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label="Back to my location"
           >
@@ -1937,7 +2060,7 @@ const App: React.FC = () => {
             type="button"
             onClick={toggleLanguage}
             data-map-ui="language-toggle"
-            className="w-7 h-7 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[11px] font-semibold leading-none"
+            className="w-11 h-11 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[11px] font-semibold leading-none"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('toggleLanguage')}
           >
@@ -1947,7 +2070,7 @@ const App: React.FC = () => {
             type="button"
             onClick={() => setShowHelpModal(true)}
             data-map-ui="help"
-            className="w-7 h-7 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            className="w-11 h-11 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('showHelp')}
           >
@@ -1972,7 +2095,7 @@ const App: React.FC = () => {
         )}
 
         {echoTab === 'home' && mapState.isReady && mapRef.current && (
-          <div className="absolute top-4 left-4 z-30 flex flex-col gap-1 pointer-events-auto">
+          <div className="absolute top-4 left-4 z-30 flex flex-col gap-1 pointer-events-auto" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
             <button
               type="button"
               data-map-ui="zoom-in"
@@ -2143,7 +2266,7 @@ const App: React.FC = () => {
             />
         )}
        
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-20 pointer-events-none">
+        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-20 pointer-events-none" style={{ bottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
             <div className="flex items-center justify-center gap-3 pointer-events-auto flex-wrap">
                 <button
                   type="button"
@@ -2264,6 +2387,7 @@ const App: React.FC = () => {
       {import.meta.env.DEV && devEchoApiHint && (
         <div
           className="fixed bottom-4 left-1/2 -translate-x-1/2 max-w-[min(640px,calc(100vw-2rem))] bg-amber-950 text-amber-50 text-xs px-4 py-3 rounded-md shadow-lg z-[199] border border-amber-700/80 leading-snug"
+          style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
           role="status"
         >
           {devEchoApiHint}
@@ -2275,6 +2399,7 @@ const App: React.FC = () => {
           className={`fixed left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-md shadow-lg z-[200] animate-toast flex items-center gap-2 ${
             isLocateSuccessToast ? 'top-1/2 -translate-y-1/2' : 'top-4'
           }`}
+          style={isLocateSuccessToast ? undefined : { top: 'max(1rem, env(safe-area-inset-top))' }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
           {toastMessage}

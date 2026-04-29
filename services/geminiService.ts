@@ -2,7 +2,7 @@ import { assertFileSizeOk, MAX_UPLOAD_BYTES } from '../constants/uploadLimits';
 import { apiUrl } from '../lib/apiBase';
 import type { BuildingStyleId } from '../prompts/buildingStyle';
 import { uploadImageAndCreateJimengUrl } from './jimengInputUpload';
-export type PreferredImageModel = 'gemini' | 'jimeng' | 'gpt-image-2';
+export type PreferredImageModel = 'gemini' | 'jimeng' | 'chatgpt-image';
 
 /** 与后端 POST 路径一致；本地由 Vite 插件提供，生产由 VITE_API_BASE_URL 指向的服务提供 */
 function generateEndpoint(): string {
@@ -33,7 +33,7 @@ export interface GenerateImageOptions {
   userPrompt?: string;
   /** 与 AddBuildingModal 一致，决定 Vertex systemInstruction 风格 */
   buildingStyle?: BuildingStyleId;
-  /** 预留给多模型路由：gemini | 即梦 | gpt-image-2 */
+  /** 预留给多模型路由：gemini | 即梦 | chatgpt-image */
   preferredModel?: PreferredImageModel;
 }
 

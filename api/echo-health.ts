@@ -5,9 +5,14 @@ import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 type EchoApiEnv = {
+  API_KEY?: string;
   GEMINI_API_KEY?: string;
   OPENAI_API_KEY?: string;
+  OPENAI_BASE_URL?: string;
   OPENAI_IMAGE_MODEL?: string;
+  OPENAI_IMAGE_SIZE?: string;
+  OPENAI_IMAGE_QUALITY?: string;
+  OPENAI_IMAGE_RESOLUTION?: string;
   JIMENG_ACCESS_KEY_ID?: string;
   JIMENG_SECRET_ACCESS_KEY?: string;
   JIMENG_BASE_URL?: string;
@@ -46,9 +51,14 @@ function handleOptions(req: VercelRequest, res: VercelResponse): boolean {
 
 function envFromProcess(): EchoApiEnv {
   return {
+    API_KEY: process.env.API_KEY,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
     OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL,
+    OPENAI_IMAGE_SIZE: process.env.OPENAI_IMAGE_SIZE,
+    OPENAI_IMAGE_QUALITY: process.env.OPENAI_IMAGE_QUALITY,
+    OPENAI_IMAGE_RESOLUTION: process.env.OPENAI_IMAGE_RESOLUTION,
     JIMENG_ACCESS_KEY_ID: process.env.JIMENG_ACCESS_KEY_ID,
     JIMENG_SECRET_ACCESS_KEY: process.env.JIMENG_SECRET_ACCESS_KEY,
     JIMENG_BASE_URL: process.env.JIMENG_BASE_URL,
@@ -97,7 +107,7 @@ function createGenAI(env: EchoApiEnv): GoogleGenAI | null {
   if (project) {
     return new GoogleGenAI({ vertexai: true, project, location, apiVersion: 'v1' });
   }
-  const key = env.GEMINI_API_KEY?.trim();
+  const key = env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim();
   if (key) return new GoogleGenAI({ apiKey: key });
   return null;
 }
@@ -107,7 +117,26 @@ function resolveImageModel(env: EchoApiEnv): string {
 }
 
 function resolveOpenAIImageModel(env: EchoApiEnv): string {
-  return env.OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-1.5';
+  const explicit = env.OPENAI_IMAGE_MODEL?.trim();
+  if (explicit) return explicit;
+  if (resolveOpenAIBaseUrl(env).includes('api.apimart.ai')) return 'gpt-image-2';
+  return 'chatgpt-image-latest';
+}
+
+function resolveOpenAIBaseUrl(env: EchoApiEnv): string {
+  return env.OPENAI_BASE_URL?.trim() || 'https://api.openai.com/v1';
+}
+
+function resolveOpenAIImageSize(env: EchoApiEnv): string {
+  return env.OPENAI_IMAGE_SIZE?.trim() || '1024x1024';
+}
+
+function resolveOpenAIImageQuality(env: EchoApiEnv): string {
+  return env.OPENAI_IMAGE_QUALITY?.trim() || 'medium';
+}
+
+function resolveOpenAIImageResolution(env: EchoApiEnv): string {
+  return env.OPENAI_IMAGE_RESOLUTION?.trim() || '1k';
 }
 
 function resolveJimengImageModel(env: EchoApiEnv): string {
@@ -131,11 +160,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const credentialsFileExists = credPath && !credPath.startsWith('{') ? existsSync(credPath) : false;
     const hasProject = Boolean(env.GOOGLE_CLOUD_PROJECT?.trim());
     const hasCredVar = Boolean(env.GOOGLE_APPLICATION_CREDENTIALS?.trim() || env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim());
-    const hasGeminiKey = Boolean(env.GEMINI_API_KEY?.trim());
+    const hasGeminiKey = Boolean(env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim());
     const hasOpenAiKey = Boolean(env.OPENAI_API_KEY?.trim());
     const hasJimengKeys = Boolean(env.JIMENG_ACCESS_KEY_ID?.trim() && env.JIMENG_SECRET_ACCESS_KEY?.trim());
     const ai = createGenAI(env);
     const imageModel = resolveImageModel(env);
+    const providers = {
+      gemini: Boolean(ai),
+      'chatgpt-image': hasOpenAiKey,
+      jimeng: hasJimengKeys,
+    } as const;
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
@@ -144,7 +178,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       JSON.stringify({
         ok: true,
         echoApi: true,
-        generateConfigured: Boolean(ai) || hasOpenAiKey || hasJimengKeys,
+        generateConfigured: Object.values(providers).some(Boolean),
+        providers,
         env: {
           hasGoogleCloudProject: hasProject,
           hasGoogleApplicationCredentials: hasCredVar,
@@ -156,7 +191,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         },
         geocode: process.env.VITE_AMAP_WEB_KEY?.trim() || process.env.AMAP_WEB_KEY?.trim() ? 'amap' : 'nominatim+open-meteo',
         imageModel,
+        openAiBaseUrl: resolveOpenAIBaseUrl(env),
         openAiImageModel: resolveOpenAIImageModel(env),
+        openAiImageSize: resolveOpenAIImageSize(env),
+        openAiImageQuality: resolveOpenAIImageQuality(env),
+        openAiImageResolution: resolveOpenAIImageResolution(env),
         jimengImageModel: resolveJimengImageModel(env),
         message: ai || hasOpenAiKey || hasJimengKeys
           ? 'POST /api/generate available'

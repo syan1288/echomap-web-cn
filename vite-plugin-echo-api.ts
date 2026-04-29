@@ -16,7 +16,11 @@ export interface EchoApiEnv {
   API_KEY?: string;
   GEMINI_API_KEY?: string;
   OPENAI_API_KEY?: string;
+  OPENAI_BASE_URL?: string;
   OPENAI_IMAGE_MODEL?: string;
+  OPENAI_IMAGE_SIZE?: string;
+  OPENAI_IMAGE_QUALITY?: string;
+  OPENAI_IMAGE_RESOLUTION?: string;
   JIMENG_ACCESS_KEY_ID?: string;
   JIMENG_SECRET_ACCESS_KEY?: string;
   JIMENG_BASE_URL?: string;
@@ -46,8 +50,160 @@ export interface EchoApiEnv {
 function resolveOpenAIImageModel(env: EchoApiEnv): string {
   const explicit = env.OPENAI_IMAGE_MODEL?.trim();
   if (explicit) return explicit;
-  // UI label remains "gpt-image-2"; backend defaults to current Images API GPT model.
-  return 'gpt-image-1.5';
+  if (isApimartOpenAIGateway(resolveOpenAIBaseUrl(env))) {
+    return 'gpt-image-2';
+  }
+  // ChatGPT 图像 2.0 在 API 里对应当前 ChatGPT 图像别名。
+  return 'chatgpt-image-latest';
+}
+
+function resolveOpenAIBaseUrl(env: EchoApiEnv): string {
+  const explicit = env.OPENAI_BASE_URL?.trim();
+  if (!explicit) return 'https://api.openai.com/v1';
+  return explicit.replace(/\/+$/, '');
+}
+
+function isApimartOpenAIGateway(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).host === 'api.apimart.ai';
+  } catch {
+    return false;
+  }
+}
+
+function resolveOpenAIImageSize(env: EchoApiEnv): '1024x1024' | '1024x1536' | '1536x1024' {
+  const explicit = env.OPENAI_IMAGE_SIZE?.trim();
+  if (explicit === '1024x1536' || explicit === '1536x1024' || explicit === '1024x1024') {
+    return explicit;
+  }
+  return '1024x1024';
+}
+
+function resolveOpenAIImageQuality(env: EchoApiEnv): 'low' | 'medium' | 'high' {
+  const explicit = env.OPENAI_IMAGE_QUALITY?.trim();
+  if (explicit === 'low' || explicit === 'medium' || explicit === 'high') {
+    return explicit;
+  }
+  return 'medium';
+}
+
+function resolveOpenAIImageResolution(env: EchoApiEnv): '1k' | '2k' | '4k' {
+  const explicit = env.OPENAI_IMAGE_RESOLUTION?.trim();
+  if (explicit === '1k' || explicit === '2k' || explicit === '4k') {
+    return explicit;
+  }
+  return '1k';
+}
+
+function buildImageDataUri(imageBase64: string, mimeType: string): string {
+  return `data:${mimeType || 'image/jpeg'};base64,${imageBase64}`;
+}
+
+async function requestApimartGptImage2(args: {
+  env: EchoApiEnv;
+  imageBase64: string;
+  imageUrls?: string[];
+  mimeType: string;
+  prompt: string;
+}): Promise<{ imageUrl: string; model: string; backend: 'openai' }> {
+  const apiKey = args.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error('OPENAI_API_KEY is missing');
+
+  const baseUrl = resolveOpenAIBaseUrl(args.env);
+  const model = resolveOpenAIImageModel(args.env);
+  const size = '1:1';
+  const resolution = resolveOpenAIImageResolution(args.env);
+  const imageUrls = args.imageUrls?.length
+    ? args.imageUrls
+    : [buildImageDataUri(args.imageBase64, args.mimeType || 'image/jpeg')];
+
+  const submitResponse = await fetch(`${baseUrl}/images/generations`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      prompt: args.prompt,
+      n: 1,
+      size,
+      resolution,
+      image_urls: imageUrls,
+    }),
+  });
+  const submitText = await submitResponse.text();
+  let submitJson: unknown = null;
+  try {
+    submitJson = submitText ? JSON.parse(submitText) : null;
+  } catch {
+    submitJson = null;
+  }
+  const submitData = submitJson as {
+    code?: number;
+    data?: Array<{ task_id?: string; status?: string }>;
+    message?: string;
+    error?: { message?: string };
+  } | null;
+  const taskId = submitData?.data?.[0]?.task_id;
+  if (!submitResponse.ok || submitData?.code !== 200 || !taskId) {
+    throw new Error(
+      submitData?.error?.message ||
+        submitData?.message ||
+        submitText ||
+        `APIMart gpt-image-2 submit failed (${submitResponse.status})`
+    );
+  }
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 1 ? 10_000 : 4_000));
+    }
+    const resultResponse = await fetch(`${baseUrl}/tasks/${taskId}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+    const resultText = await resultResponse.text();
+    let resultJson: unknown = null;
+    try {
+      resultJson = resultText ? JSON.parse(resultText) : null;
+    } catch {
+      resultJson = null;
+    }
+    const resultData = resultJson as {
+      code?: number;
+      data?: {
+        status?: string;
+        result?: {
+          images?: Array<{ url?: string[] }>;
+        };
+        error?: { message?: string };
+      };
+      message?: string;
+      error?: { message?: string };
+    } | null;
+    if (!resultResponse.ok || resultData?.code !== 200) {
+      throw new Error(
+        resultData?.error?.message ||
+          resultData?.message ||
+          resultText ||
+          `APIMart gpt-image-2 task failed (${resultResponse.status})`
+      );
+    }
+    const status = resultData?.data?.status;
+    if (status === 'submitted' || status === 'pending' || status === 'processing') continue;
+    if (status === 'completed') {
+      const imageUrl = resultData.data?.result?.images?.[0]?.url?.[0];
+      if (imageUrl) {
+        return { imageUrl, model, backend: 'openai' };
+      }
+      throw new Error('APIMart gpt-image-2 returned no image URL');
+    }
+    throw new Error(resultData?.data?.error?.message || `APIMart gpt-image-2 task status: ${status || 'unknown'}`);
+  }
+
+  throw new Error('APIMart gpt-image-2 task timed out');
 }
 
 async function requestOpenAIImageEdit(args: {
@@ -59,7 +215,19 @@ async function requestOpenAIImageEdit(args: {
   const apiKey = args.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error('OPENAI_API_KEY is missing');
 
+  const baseUrl = resolveOpenAIBaseUrl(args.env);
+  if (isApimartOpenAIGateway(baseUrl) && resolveOpenAIImageModel(args.env) === 'gpt-image-2') {
+    return requestApimartGptImage2({
+      env: args.env,
+      imageBase64: args.imageBase64,
+      imageUrls: undefined,
+      mimeType: args.mimeType,
+      prompt: args.prompt,
+    });
+  }
   const model = resolveOpenAIImageModel(args.env);
+  const size = resolveOpenAIImageSize(args.env);
+  const quality = resolveOpenAIImageQuality(args.env);
   const imageBytes = Buffer.from(args.imageBase64, 'base64');
   const form = new FormData();
   form.append('model', model);
@@ -69,8 +237,8 @@ async function requestOpenAIImageEdit(args: {
     `upload.${(args.mimeType || 'image/jpeg').split('/')[1] || 'jpg'}`
   );
   form.append('prompt', args.prompt);
-  form.append('size', 'auto');
-  form.append('quality', 'auto');
+  form.append('size', size);
+  form.append('quality', quality);
   form.append('background', 'transparent');
   form.append('output_format', 'png');
   form.append('n', '1');
@@ -78,7 +246,7 @@ async function requestOpenAIImageEdit(args: {
 
   const request = async (withoutInputFidelity = false) => {
     if (withoutInputFidelity) form.delete('input_fidelity');
-    const r = await fetch('https://api.openai.com/v1/images/edits', {
+    const r = await fetch(`${baseUrl}/images/edits`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}` },
       body: form,
@@ -698,12 +866,17 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
           const credentialsFileExists = credPath ? existsSync(credPath) : false;
           const hasProject = Boolean(env.GOOGLE_CLOUD_PROJECT?.trim());
           const hasCredVar = Boolean(env.GOOGLE_APPLICATION_CREDENTIALS?.trim());
-          const hasGeminiKey = Boolean(env.GEMINI_API_KEY?.trim());
+          const hasGeminiKey = Boolean(env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim());
           const hasOpenAiKey = Boolean(env.OPENAI_API_KEY?.trim());
           const hasJimengKeys = Boolean(
             env.JIMENG_ACCESS_KEY_ID?.trim() && env.JIMENG_SECRET_ACCESS_KEY?.trim()
           );
           const ai = getAi();
+          const providers = {
+            gemini: Boolean(ai),
+            'chatgpt-image': hasOpenAiKey,
+            jimeng: hasJimengKeys,
+          } as const;
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
           res.end(
@@ -711,7 +884,8 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
               ok: true,
               echoApi: true,
               /** 为 true 时 POST /api/generate 才会成功（否则 503） */
-              generateConfigured: Boolean(ai) || hasOpenAiKey || hasJimengKeys,
+              generateConfigured: Object.values(providers).some(Boolean),
+              providers,
               /** 以下为诊断字段（不含密钥内容） */
               env: {
                 hasGoogleCloudProject: hasProject,
@@ -771,8 +945,8 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             userPrompt?: string;
             /** flat | pixel | ink | healing */
             buildingStyle?: string;
-            /** gemini | jimeng | gpt-image-2 */
-            preferredModel?: 'gemini' | 'jimeng' | 'gpt-image-2';
+            /** gemini | jimeng | chatgpt-image */
+            preferredModel?: 'gemini' | 'jimeng' | 'chatgpt-image';
           };
           if (!body.imageBase64) {
             res.statusCode = 400;
@@ -782,7 +956,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
           }
 
           const wantsJimeng = body.preferredModel === 'jimeng';
-          const wantsOpenAI = body.preferredModel === 'gpt-image-2';
+          const wantsOpenAI = body.preferredModel === 'chatgpt-image';
           const ai = wantsOpenAI || wantsJimeng ? null : getAi();
           if (!wantsOpenAI && !wantsJimeng && !ai) {
             res.statusCode = 503;

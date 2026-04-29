@@ -1,8 +1,48 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import generateHandler from '../api/generate.js';
 import geocodeHandler from '../api/geocode.js';
 import healthHandler from '../api/echo-health.js';
+
+function stripWrappingQuotes(value: string): string {
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+}
+
+function loadEnvFile(filePath: string): void {
+  if (!existsSync(filePath)) return;
+
+  const text = readFileSync(filePath, 'utf8');
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const equalIndex = line.indexOf('=');
+    if (equalIndex <= 0) continue;
+
+    const key = line.slice(0, equalIndex).trim();
+    if (!key || process.env[key] != null) continue;
+
+    const rawValue = line.slice(equalIndex + 1).trim();
+    process.env[key] = stripWrappingQuotes(rawValue);
+  }
+}
+
+function loadLocalEnv(): void {
+  const cwd = process.cwd();
+  loadEnvFile(path.join(cwd, '.env'));
+  loadEnvFile(path.join(cwd, '.env.local'));
+}
+
+loadLocalEnv();
 
 const HOST = process.env.HOST?.trim() || '127.0.0.1';
 const PORT = Number.parseInt(process.env.PORT || '3001', 10);
