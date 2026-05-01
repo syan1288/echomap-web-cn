@@ -160,10 +160,47 @@ export const MemoryAudioModal: React.FC<MemoryAudioModalProps> = ({
     });
   }, []);
 
+  const requestRemoveEntry = useCallback(
+    (entry: AudioEntry) => {
+      if (!window.confirm(`Delete "${entry.title}"?`)) return;
+      removeEntry(entry.id);
+    },
+    [removeEntry]
+  );
+
   if (!open) return null;
 
   const audioEntries = draftEntries.filter((entry) => entry.kind === 'audio');
   const musicEntries = draftEntries.filter((entry) => entry.kind === 'music');
+
+  const renderEntryRows = (entries: AudioEntry[], emptyText: string) => {
+    if (entries.length === 0) {
+      return <p className="mt-3 mb-0 text-[12px] text-[#7a7a7a]">{emptyText}</p>;
+    }
+    return (
+      <div className="mt-3 space-y-2">
+        {entries.map((entry) => (
+          <div
+            key={entry.id}
+            className="flex items-center justify-between gap-3 border border-black bg-white px-3 py-3 text-left"
+            onContextMenu={(event) => {
+              event.preventDefault();
+              requestRemoveEntry(entry);
+            }}
+            title="Right click to delete"
+          >
+            <div className="min-w-0">
+              <div className="truncate text-[13px] text-[#332115]">{entry.title}</div>
+              <div className="mt-1 text-[11px] text-[#7a7a7a]">
+                {entry.kind === 'audio' ? 'Audio file' : entry.source === 'builtin' ? 'Preset music' : 'Music file'}
+              </div>
+            </div>
+            <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-[#8a8a8a]">Delete</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -189,9 +226,13 @@ export const MemoryAudioModal: React.FC<MemoryAudioModalProps> = ({
       />
 
       <div
-        className="bg-white w-full max-w-[720px] min-h-[620px] border border-black shadow-xl rounded-none overflow-hidden flex flex-col"
+        className="bg-white w-full max-w-[720px] min-h-[520px] border border-black shadow-xl rounded-none overflow-y-auto flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ fontFamily: FONT_BODY, fontWeight: 400 }}
+        style={{
+          fontFamily: FONT_BODY,
+          fontWeight: 400,
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1.25rem)',
+        }}
       >
         <div className="px-6 pt-5 pb-4">
           <button
@@ -247,20 +288,7 @@ export const MemoryAudioModal: React.FC<MemoryAudioModalProps> = ({
               <span className="text-[18px]">{recording ? 'Stop recording' : 'Live recording'}</span>
             </button>
             {recordingError && <p className="mt-2 mb-0 text-[12px] text-red-600">{recordingError}</p>}
-            {audioEntries.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {audioEntries.map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className="px-3 py-2 border border-black bg-white text-left text-[12px] hover:bg-neutral-50"
-                    onClick={() => removeEntry(entry.id)}
-                  >
-                    {entry.title} ×
-                  </button>
-                ))}
-              </div>
-            )}
+            {renderEntryRows(audioEntries, 'No audio files yet. Right-click an uploaded item to delete it.')}
           </section>
 
           <section>
@@ -328,20 +356,7 @@ export const MemoryAudioModal: React.FC<MemoryAudioModalProps> = ({
               </p>
             </div>
 
-            {musicEntries.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {musicEntries.map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className="px-3 py-2 border border-black bg-white text-left text-[12px] hover:bg-neutral-50"
-                    onClick={() => removeEntry(entry.id)}
-                  >
-                    {entry.title} ×
-                  </button>
-                ))}
-              </div>
-            )}
+            {renderEntryRows(musicEntries, 'No music selected yet. Right-click a music item to delete it.')}
           </section>
         </div>
 

@@ -113,7 +113,7 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
   return (
     <div
       data-map-ui="search-control"
-      className="absolute top-[4.25rem] left-1/2 -translate-x-1/2 z-30 px-2"
+      className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-2"
       style={{ width: 360, maxWidth: 'calc(100% - 16px)' }}
       onBlur={() => setTimeout(() => setIsActive(false), 120)}
     >

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { MoonFaceAvatar } from './MoonFaceAvatar';
 
 /** 与插画顶缘间距：锚点已贴在图片盒子上，此处仅留极小缝 */
-const POPOVER_GAP_PX = -10;
+const POPOVER_GAP_PX = -14;
 const AVATAR_BASE = 48;
 /** 相对原 0.4× 基准再 ×1.1（emoji / Facehash 视觉） */
 const AVATAR_DISPLAY = Math.round(AVATAR_BASE * 0.4 * 1.1);

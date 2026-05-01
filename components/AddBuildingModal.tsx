@@ -6,6 +6,7 @@ import {
   DEFAULT_BUILDING_STYLE,
   type BuildingStyleId,
 } from '../prompts/buildingStyle';
+import { isNativeApp, pickImageAsFile } from '../lib/mobile';
 
 const STYLE_I18N_KEY: Record<BuildingStyleId, string> = {
   flat: 'buildingStyle_flat',
@@ -68,6 +69,16 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
     if (source === 'camera') setStep('review');
   }, [t]);
 
+  const pickNativeFile = useCallback(async (source: 'camera' | 'photos') => {
+    try {
+      const file = await pickImageAsFile(source, source === 'camera' ? 'camera' : 'gallery');
+      applyFile(file, source === 'camera' ? 'camera' : 'local');
+    } catch (error) {
+      console.error('Native image pick failed', error);
+      setSizeError('Unable to access image source. Please try again.');
+    }
+  }, [applyFile]);
+
   if (!open) return null;
 
   return (
@@ -100,7 +111,11 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
         <div
           className="bg-white w-full max-w-[880px] border border-black shadow-xl flex flex-col rounded-none overflow-hidden"
           onMouseDown={(e) => e.stopPropagation()}
-          style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
+          style={{
+            fontFamily: '"Roboto Mono", ui-monospace, monospace',
+            fontWeight: 400,
+            maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1.25rem)',
+          }}
         >
           <div className="px-6 md:px-12 pt-6 pb-5 flex flex-col gap-4">
             <button
@@ -118,7 +133,13 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
                 type="button"
                 className="h-9 w-9 bg-transparent border-0 rounded-none flex items-center justify-center cursor-pointer hover:opacity-75"
                 aria-label="Upload from local"
-                onClick={() => localInputRef.current?.click()}
+                onClick={() => {
+                  if (isNativeApp()) {
+                    void pickNativeFile('photos');
+                    return;
+                  }
+                  localInputRef.current?.click();
+                }}
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
@@ -144,7 +165,13 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
               <button
                 type="button"
                 className="w-full h-full min-h-[330px] border-0 bg-transparent cursor-pointer flex items-center justify-center p-5"
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={() => {
+                  if (isNativeApp()) {
+                    void pickNativeFile('camera');
+                    return;
+                  }
+                  cameraInputRef.current?.click();
+                }}
                 aria-label="Instant photo"
               >
                 {previewUrl ? (
@@ -226,7 +253,11 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
         <div
           className="bg-white w-full max-w-[640px] border border-black shadow-xl rounded-none overflow-hidden"
           onMouseDown={(e) => e.stopPropagation()}
-          style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
+          style={{
+            fontFamily: '"Roboto Mono", ui-monospace, monospace',
+            fontWeight: 400,
+            maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1.25rem)',
+          }}
         >
           <div className="p-4">
             <button
@@ -250,7 +281,13 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
             <button
               type="button"
               className="h-12 w-12 border-0 bg-transparent cursor-pointer flex items-center justify-center"
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={() => {
+                if (isNativeApp()) {
+                  void pickNativeFile('camera');
+                  return;
+                }
+                cameraInputRef.current?.click();
+              }}
               aria-label="Retake"
             >
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round" aria-hidden>

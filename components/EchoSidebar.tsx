@@ -77,7 +77,7 @@ const JimengBrandIcon: React.FC = () => (
 );
 
 const IconSidebarToggle: React.FC<{ collapsed: boolean }> = ({ collapsed }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <rect x="4" y="5" width="16" height="14" rx="1.5" />
     <path d="M10 5v14" />
     {collapsed ? <path d="m13 12 3-2.5v5L13 12Z" fill="currentColor" stroke="none" /> : <path d="m11 12 3-2.5v5L11 12Z" fill="currentColor" stroke="none" />}
@@ -85,7 +85,7 @@ const IconSidebarToggle: React.FC<{ collapsed: boolean }> = ({ collapsed }) => (
 );
 
 const IconHomeLine: React.FC = () => (
-  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="m3 10.5 9-7 9 7" />
     <path d="M5.5 9.8v9.2h13V9.8" />
     <path d="M9.4 19v-5.2h5.2V19" />
@@ -93,7 +93,7 @@ const IconHomeLine: React.FC = () => (
 );
 
 const IconGalleryLine: React.FC = () => (
-  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <rect x="4" y="5" width="16" height="14" rx="1.8" />
     <path d="m7.5 15.3 3.2-3.6 2.8 2.9 2.6-3 3.4 3.9" />
     <circle cx="9" cy="9" r="1.2" />
@@ -101,7 +101,7 @@ const IconGalleryLine: React.FC = () => (
 );
 
 const IconAvatarLine: React.FC = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <circle cx="12" cy="8.2" r="3.2" />
     <path d="M5.8 18.6c1.4-2.7 3.7-4.1 6.2-4.1s4.8 1.4 6.2 4.1" />
   </svg>
@@ -205,7 +205,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
         }
         setMenuOpen((v) => !v);
       }}
-      className={className ?? 'h-14 w-14 rounded-full border border-white/70 bg-white/78 text-[#0053D4] text-[18px] tracking-wide cursor-pointer backdrop-blur-md'}
+      className={className ?? 'h-14 w-14 rounded-full border border-white/70 bg-white/78 text-[#0053D4] text-[24px] tracking-wide cursor-pointer backdrop-blur-md'}
       style={
         className
           ? {

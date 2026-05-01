@@ -101,6 +101,7 @@ interface ImageProcessingResult {
 }
 
 interface PhotoPreviewState {
+    memoryId: number;
     photos: PhotoData[];
     currentIndex: number;
 }
@@ -1152,6 +1153,20 @@ const App: React.FC = () => {
     [selectedImageId, images, user?.id, persistCloudImage]
   );
 
+  const handleDeletePhotoFromGallery = useCallback(
+    (memoryId: number, photoIndex: number) => {
+      const current = latestImagesRef.current.find((img) => img.id === memoryId);
+      if (!current || current.photos.length <= 1) return;
+      const updated = {
+        ...current,
+        photos: current.photos.filter((_, idx) => idx !== photoIndex),
+      };
+      setImages((prev) => prev.map((img) => (img.id === memoryId ? updated : img)));
+      void persistCloudImage(updated, { requireLocked: true });
+    },
+    [persistCloudImage]
+  );
+
   useEffect(() => {
     const handlePaste = async (event: ClipboardEvent) => {
       const items = event.clipboardData?.items;
@@ -1432,7 +1447,7 @@ const App: React.FC = () => {
   
   const handleViewPhoto = (photoIndex: number) => {
       if (selectedImage) {
-        setPhotoPreviewState({ photos: selectedImage.photos, currentIndex: photoIndex });
+        setPhotoPreviewState({ memoryId: selectedImage.id, photos: selectedImage.photos, currentIndex: photoIndex });
       }
   };
 
@@ -1999,17 +2014,17 @@ const App: React.FC = () => {
           className="relative flex min-h-0 w-full flex-1 overflow-hidden"
           onPointerDownCapture={handleMapSurfacePointerDown}
         >
-        <div className="absolute top-4 right-4 z-[60] flex items-center gap-2 pointer-events-auto" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+        <div className="absolute top-4 right-4 z-[60] flex items-center gap-1.5 pointer-events-auto" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowBasemapMenu((open) => !open)}
               data-map-ui="basemap-theme"
-              className="w-11 h-11 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+              className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Change basemap theme"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <circle cx="13.5" cy="6.5" r=".5" />
                 <circle cx="17.5" cy="10.5" r=".5" />
                 <circle cx="8.5" cy="7.5" r=".5" />
@@ -2049,20 +2064,20 @@ const App: React.FC = () => {
               mapRef.current.setView([a.lat, a.lng], Math.max(6, mapRef.current.getZoom()));
             }}
             data-map-ui="back-to-location"
-              className="w-11 h-11 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label="Back to my location"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 21c4.6-4.1 7-7.4 7-10.2A7 7 0 1 0 5 10.8C5 13.6 7.4 16.9 12 21Z" />
+              <circle cx="12" cy="10" r="2.5" />
             </svg>
           </button>
           <button
             type="button"
             onClick={toggleLanguage}
             data-map-ui="language-toggle"
-            className="w-11 h-11 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[11px] font-semibold leading-none"
+            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[12px] font-semibold leading-none"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('toggleLanguage')}
           >
@@ -2072,11 +2087,11 @@ const App: React.FC = () => {
             type="button"
             onClick={() => setShowHelpModal(true)}
             data-map-ui="help"
-            className="w-11 h-11 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('showHelp')}
           >
-            ?
+            <span className="text-[14px] font-medium leading-none" aria-hidden>?</span>
           </button>
         </div>
 
@@ -2101,7 +2116,7 @@ const App: React.FC = () => {
             <button
               type="button"
               data-map-ui="zoom-in"
-              className="w-9 h-9 border border-black bg-white flex items-center justify-center text-lg leading-none hover:bg-neutral-100"
+              className="w-8 h-8 border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Zoom in"
               onClick={() => {
@@ -2109,12 +2124,15 @@ const App: React.FC = () => {
                 mapRef.current?.zoomIn();
               }}
             >
-              +
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
             </button>
             <button
               type="button"
               data-map-ui="zoom-out"
-              className="w-9 h-9 border border-black bg-white flex items-center justify-center text-lg leading-none hover:bg-neutral-100"
+              className="w-8 h-8 border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Zoom out"
               onClick={() => {
@@ -2122,7 +2140,9 @@ const App: React.FC = () => {
                 mapRef.current?.zoomOut();
               }}
             >
-              −
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M5 12h14" />
+              </svg>
             </button>
           </div>
         )}
@@ -2280,7 +2300,12 @@ const App: React.FC = () => {
                   style={{ borderWidth: MAP_ICON_BORDER_PX }}
                   aria-label={t('hammerAddBuilding')}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0-.83-.83-.83-2.17 0-3L12 9"/><path d="m17.64 6.36-1.28-1.28a1.21 1.21 0 0 0-1.72 0L4.36 16.36a1.21 1.21 0 0 0 0 1.72l1.28 1.28c.47.47 1.23.47 1.7 0l10.28-10.28a1.21 1.21 0 0 0 0-1.72Z"/><path d="m22 2-5 5"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <rect x="4" y="8.6" width="16" height="10.4" rx="2" />
+                      <circle cx="12" cy="13.5" r="2.2" />
+                      <path d="M12 1.2v8.2" />
+                      <path d="M9.8 4.3 12 2.1l2.2 2.2" />
+                    </svg>
                 </button>
                 <button
                   type="button"
@@ -2289,7 +2314,7 @@ const App: React.FC = () => {
                   style={{ borderWidth: MAP_ICON_BORDER_PX }}
                   aria-label={t('exportMap')}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
@@ -2349,8 +2374,8 @@ const App: React.FC = () => {
             <span>Scroll for more</span>
             <svg
               className="mt-1.5 block shrink-0"
-              width={22}
-              height={14}
+              width={36}
+              height={24}
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -2359,7 +2384,7 @@ const App: React.FC = () => {
               <path
                 d="M6 9l6 6 6-6"
                 stroke="currentColor"
-                strokeWidth={2}
+                strokeWidth={2.2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -2431,6 +2456,20 @@ const App: React.FC = () => {
           onClose={() => setPhotoPreviewState(null)}
           onNext={handlePhotoPreviewNext}
           onPrevious={handlePhotoPreviewPrevious}
+          onDelete={photoPreviewState.currentIndex > 0 ? () => {
+            void handleDeletePhotoFromMemory(photoPreviewState.memoryId, photoPreviewState.currentIndex);
+            setPhotoPreviewState((prev) => {
+              if (!prev) return null;
+              if (prev.photos.length <= 1) return null;
+              const nextPhotos = prev.photos.filter((_, idx) => idx !== prev.currentIndex);
+              const nextIndex = Math.min(prev.currentIndex, nextPhotos.length - 1);
+              return {
+                ...prev,
+                photos: nextPhotos,
+                currentIndex: nextIndex,
+              };
+            });
+          } : undefined}
         />
       )}
 
@@ -2474,6 +2513,13 @@ const App: React.FC = () => {
         openM04={galleryOpenM04}
         photos={galleryBuilding?.photos ?? []}
         audioEntries={galleryBuilding?.audioEntries ?? []}
+        onDeletePhoto={
+          galleryDetailId === null
+            ? undefined
+            : (photoIndex) => {
+                handleDeletePhotoFromGallery(galleryDetailId, photoIndex);
+              }
+        }
         log={
           galleryBuilding?.log ??
           normalizeLog({

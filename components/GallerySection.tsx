@@ -139,8 +139,8 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
   return (
     <section id="gallery" className="relative flex flex-1 flex-col min-h-0 h-full w-full overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col bg-[#F9F1E2]">
-        <div className="flex w-full flex-1 min-h-0 flex-col px-2 pt-5 pb-3 sm:px-3 md:px-4">
-          <div className="flex justify-center shrink-0 mb-6 w-full px-1">
+        <div className="flex w-full flex-1 min-h-0 flex-col px-2 pt-6 pb-3 sm:px-3 md:px-4">
+          <div className="mt-1 flex justify-center shrink-0 mb-6 w-full px-1">
             <div className="relative w-full max-w-[400px]">
               <div className="relative flex flex-1 min-w-0">
                 <div className="relative shrink-0">

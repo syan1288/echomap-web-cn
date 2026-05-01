@@ -11,6 +11,7 @@ export interface GalleryDetailModalsProps {
   log: LogData;
   photos: PhotoData[];
   audioEntries: AudioEntry[];
+  onDeletePhoto?: (photoIndex: number) => void;
   onGoToMemories: () => void;
   onBackToGalleryFromM03: () => void;
   onBackToDiary: () => void;
@@ -23,6 +24,7 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
   log,
   photos,
   audioEntries,
+  onDeletePhoto,
   onGoToMemories,
   onBackToGalleryFromM03,
   onBackToDiary,
@@ -43,6 +45,10 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
   }, [photos.length, perPage, openM04]);
 
   useEffect(() => {
+    setFullscreenIndex((prev) => Math.min(prev, Math.max(0, photos.length - 1)));
+  }, [photos.length]);
+
+  useEffect(() => {
     if (!openM04) {
       setFullscreenOpen(false);
       setFullscreenIndex(0);
@@ -55,6 +61,16 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
     if (a.kind !== b.kind) return a.kind === 'music' ? -1 : 1;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
+
+  const requestDeletePhoto = (photoIndex: number) => {
+    if (!onDeletePhoto) return;
+    if (photos.length <= 1) {
+      window.alert('Keep at least one photo for this building.');
+      return;
+    }
+    if (!window.confirm('Delete this photo?')) return;
+    onDeletePhoto(photoIndex);
+  };
 
   if (!openM03 && !openM04) return null;
 
@@ -191,6 +207,11 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
               setFullscreenIndex((page - 1) * perPage + i);
               setFullscreenOpen(true);
             }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              requestDeletePhoto((page - 1) * perPage + i);
+            }}
+            title={photos.length > 1 ? 'Right click to delete this photo' : undefined}
           >
             <img src={p.url} alt="" className="w-full h-full object-cover" />
           </div>
@@ -237,6 +258,10 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
               if (dx < 0 && fullscreenIndex < photos.length - 1) setFullscreenIndex((p) => p + 1);
               if (dx > 0 && fullscreenIndex > 0) setFullscreenIndex((p) => p - 1);
               setDragStartX(null);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              requestDeletePhoto(fullscreenIndex);
             }}
           >
             <img

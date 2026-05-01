@@ -134,7 +134,7 @@ export class MapboxAdapter {
       zoom: options.zoom,
       minZoom: options.minZoom,
       maxZoom: options.maxZoom,
-      attributionControl: true,
+      attributionControl: false,
       dragRotate: false,
       pitchWithRotate: false,
       touchPitch: false,

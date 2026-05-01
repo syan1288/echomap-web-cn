@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { assertFileSizeOk } from '../constants/uploadLimits';
+import { isNativeApp, pickImageAsFile } from '../lib/mobile';
 
 const ICON_STROKE = 1.5;
 const FONT_BODY = '"Roboto Mono", ui-monospace, monospace';
@@ -46,6 +47,16 @@ export const MemoryPhotoModal: React.FC<MemoryPhotoModalProps> = ({ open, onClos
     setFile(f);
   }, []);
 
+  const pickNativeFile = useCallback(async (source: 'camera' | 'photos') => {
+    try {
+      const file = await pickImageAsFile(source, source === 'camera' ? 'camera' : 'gallery');
+      applyFile(file);
+    } catch (error) {
+      console.error('Native image pick failed', error);
+      setSizeError('Unable to access image source. Please try again.');
+    }
+  }, [applyFile]);
+
   if (!open) return null;
 
   return (
@@ -73,9 +84,13 @@ export const MemoryPhotoModal: React.FC<MemoryPhotoModalProps> = ({ open, onClos
       />
 
       <div
-        className="bg-white w-full max-w-[720px] min-h-[620px] border border-black shadow-xl rounded-none overflow-hidden flex flex-col"
+        className="bg-white w-full max-w-[720px] min-h-[520px] border border-black shadow-xl rounded-none overflow-y-auto flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ fontFamily: FONT_BODY, fontWeight: 400 }}
+        style={{
+          fontFamily: FONT_BODY,
+          fontWeight: 400,
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1.25rem)',
+        }}
       >
         <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-4">
           <button
@@ -90,7 +105,13 @@ export const MemoryPhotoModal: React.FC<MemoryPhotoModalProps> = ({ open, onClos
               type="button"
               className="h-9 w-9 bg-transparent border-0 flex items-center justify-center cursor-pointer hover:opacity-75"
               aria-label="Upload from file"
-              onClick={() => localInputRef.current?.click()}
+              onClick={() => {
+                if (isNativeApp()) {
+                  void pickNativeFile('photos');
+                  return;
+                }
+                localInputRef.current?.click();
+              }}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
@@ -119,7 +140,13 @@ export const MemoryPhotoModal: React.FC<MemoryPhotoModalProps> = ({ open, onClos
           <button
             type="button"
             className="w-full min-h-[420px] flex-1 border border-dashed border-black/45 bg-[#fafafa] rounded-none flex items-center justify-center p-6 cursor-pointer"
-            onClick={() => cameraInputRef.current?.click()}
+            onClick={() => {
+              if (isNativeApp()) {
+                void pickNativeFile('camera');
+                return;
+              }
+              cameraInputRef.current?.click();
+            }}
             aria-label="Instant photo"
           >
             {previewUrl ? (
