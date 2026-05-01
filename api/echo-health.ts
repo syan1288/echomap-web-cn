@@ -32,6 +32,12 @@ type EchoApiEnv = {
   ECHO_IMAGE_MODEL?: string;
 };
 
+type GeminiTokenProbe = {
+  mode: 'vertex' | 'apiKey' | 'none';
+  ok: boolean;
+  detail?: string;
+};
+
 function applyCors(req: VercelRequest, res: VercelResponse): void {
   const allow = process.env.ALLOW_ORIGIN?.trim() || '*';
   res.setHeader('Access-Control-Allow-Origin', allow);
@@ -143,6 +149,49 @@ function resolveJimengImageModel(env: EchoApiEnv): string {
   return env.JIMENG_REQ_KEY?.trim() || 'jimeng_seedream46_cvtob';
 }
 
+async function probeGeminiToken(env: EchoApiEnv): Promise<GeminiTokenProbe> {
+  const project = env.GOOGLE_CLOUD_PROJECT?.trim();
+  const hasApiKey = Boolean(env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim());
+
+  if (!project) {
+    if (hasApiKey) {
+      return { mode: 'apiKey', ok: true, detail: 'Gemini API key mode does not require OAuth token exchange.' };
+    }
+    return { mode: 'none', ok: false, detail: 'No Gemini credentials configured.' };
+  }
+
+  applyCredentialsEnv(env);
+
+  try {
+    const probe = (async () => {
+      const { GoogleAuth } = await import('google-auth-library');
+      const auth = new GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      });
+      const client = await auth.getClient();
+      const token = await client.getAccessToken();
+      const value =
+        typeof token === 'string'
+          ? token
+          : token && typeof token === 'object' && 'token' in token
+            ? token.token
+            : null;
+      if (!value) {
+        throw new Error('GoogleAuth returned an empty access token.');
+      }
+      return { mode: 'vertex', ok: true, detail: 'Successfully exchanged a Google OAuth access token.' } satisfies GeminiTokenProbe;
+    })();
+
+    const timeout = new Promise<GeminiTokenProbe>((_, reject) =>
+      setTimeout(() => reject(new Error('Timed out requesting token from oauth2.googleapis.com.')), 8000)
+    );
+    return await Promise.race([probe, timeout]);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { mode: 'vertex', ok: false, detail };
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (handleOptions(req, res)) return;
   applyCors(req, res);
@@ -164,6 +213,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const hasOpenAiKey = Boolean(env.OPENAI_API_KEY?.trim());
     const hasJimengKeys = Boolean(env.JIMENG_ACCESS_KEY_ID?.trim() && env.JIMENG_SECRET_ACCESS_KEY?.trim());
     const ai = createGenAI(env);
+    const geminiTokenProbe = await probeGeminiToken(env);
     const imageModel = resolveImageModel(env);
     const providers = {
       gemini: Boolean(ai),
@@ -180,6 +230,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         echoApi: true,
         generateConfigured: Object.values(providers).some(Boolean),
         providers,
+        probes: {
+          geminiToken: geminiTokenProbe,
+        },
         env: {
           hasGoogleCloudProject: hasProject,
           hasGoogleApplicationCredentials: hasCredVar,
@@ -198,7 +251,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         openAiImageResolution: resolveOpenAIImageResolution(env),
         jimengImageModel: resolveJimengImageModel(env),
         message: ai || hasOpenAiKey || hasJimengKeys
-          ? 'POST /api/generate available'
+          ? geminiTokenProbe.mode === 'vertex' && !geminiTokenProbe.ok
+            ? `POST /api/generate available, but Gemini token probe failed: ${geminiTokenProbe.detail}`
+            : 'POST /api/generate available'
           : hasProject && hasCredVar && !credentialsFileExists && !env.GOOGLE_SERVICE_ACCOUNT_JSON
             ? 'GOOGLE_APPLICATION_CREDENTIALS path not found — use GOOGLE_SERVICE_ACCOUNT_JSON on Vercel'
             : 'Set GEMINI_API_KEY, OPENAI_API_KEY, JIMENG_ACCESS_KEY_ID + JIMENG_SECRET_ACCESS_KEY, or GOOGLE_CLOUD_PROJECT + credentials (file or GOOGLE_SERVICE_ACCOUNT_JSON)',

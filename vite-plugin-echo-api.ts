@@ -47,6 +47,12 @@ export interface EchoApiEnv {
   ECHO_PREFER_API_KEY?: string;
 }
 
+type GeminiTokenProbe = {
+  mode: 'vertex' | 'apiKey' | 'none';
+  ok: boolean;
+  detail?: string;
+};
+
 function resolveOpenAIImageModel(env: EchoApiEnv): string {
   const explicit = env.OPENAI_IMAGE_MODEL?.trim();
   if (explicit) return explicit;
@@ -93,6 +99,47 @@ function resolveOpenAIImageResolution(env: EchoApiEnv): '1k' | '2k' | '4k' {
     return explicit;
   }
   return '1k';
+}
+
+async function probeGeminiToken(env: EchoApiEnv): Promise<GeminiTokenProbe> {
+  const project = env.GOOGLE_CLOUD_PROJECT?.trim();
+  const hasApiKey = Boolean(env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim());
+
+  if (!project) {
+    if (hasApiKey) {
+      return { mode: 'apiKey', ok: true, detail: 'Gemini API key mode does not require OAuth token exchange.' };
+    }
+    return { mode: 'none', ok: false, detail: 'No Gemini credentials configured.' };
+  }
+
+  try {
+    const probe = (async () => {
+      const { GoogleAuth } = await import('google-auth-library');
+      const auth = new GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      });
+      const client = await auth.getClient();
+      const token = await client.getAccessToken();
+      const value =
+        typeof token === 'string'
+          ? token
+          : token && typeof token === 'object' && 'token' in token
+            ? token.token
+            : null;
+      if (!value) {
+        throw new Error('GoogleAuth returned an empty access token.');
+      }
+      return { mode: 'vertex', ok: true, detail: 'Successfully exchanged a Google OAuth access token.' } satisfies GeminiTokenProbe;
+    })();
+
+    const timeout = new Promise<GeminiTokenProbe>((_, reject) =>
+      setTimeout(() => reject(new Error('Timed out requesting token from oauth2.googleapis.com.')), 8000)
+    );
+    return await Promise.race([probe, timeout]);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { mode: 'vertex', ok: false, detail };
+  }
 }
 
 function buildImageDataUri(imageBase64: string, mimeType: string): string {
@@ -872,6 +919,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             env.JIMENG_ACCESS_KEY_ID?.trim() && env.JIMENG_SECRET_ACCESS_KEY?.trim()
           );
           const ai = getAi();
+          const geminiTokenProbe = await probeGeminiToken(env);
           const providers = {
             gemini: Boolean(ai),
             'chatgpt-image': hasOpenAiKey,
@@ -886,6 +934,9 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
               /** 为 true 时 POST /api/generate 才会成功（否则 503） */
               generateConfigured: Object.values(providers).some(Boolean),
               providers,
+              probes: {
+                geminiToken: geminiTokenProbe,
+              },
               /** 以下为诊断字段（不含密钥内容） */
               env: {
                 hasGoogleCloudProject: hasProject,
@@ -904,7 +955,9 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
                   ? hasProject && hasCredVar && !credentialsFileExists
                     ? 'GOOGLE_APPLICATION_CREDENTIALS path not found on disk — check the file path in echomap-web/.env'
                     : 'Set GEMINI_API_KEY, OPENAI_API_KEY, JIMENG_ACCESS_KEY_ID + JIMENG_SECRET_ACCESS_KEY, or GOOGLE_CLOUD_PROJECT + GOOGLE_APPLICATION_CREDENTIALS in echomap-web/.env'
-                  : 'POST /api/generate available',
+                  : geminiTokenProbe.mode === 'vertex' && !geminiTokenProbe.ok
+                    ? `POST /api/generate available, but Gemini token probe failed: ${geminiTokenProbe.detail}`
+                    : 'POST /api/generate available',
             })
           );
         } catch (e: unknown) {
