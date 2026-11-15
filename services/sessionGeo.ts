@@ -1,6 +1,6 @@
 export type SessionAnchor = { lat: number; lng: number };
 import { buildReverseGeocodeUrl, getIpGeoUrl } from '../lib/deploymentConfig';
-import { parseIpLocation, parseReverseGeocodeLabel } from '../lib/locationAdapters';
+import { parseIpLocation, parseReverseGeocodeLabel } from '../shared/domain/geo/locationParsers';
 
 /** 浏览器定位失败时用 IP 兜底（无自建后端，标准化 JSON） */
 export async function resolveSessionAnchor(): Promise<SessionAnchor> {

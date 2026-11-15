@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import * as Tone from 'tone';
 import { generateImageWithPrompt } from './services/geminiService';
-import { assertFileSizeOk } from './constants/uploadLimits';
+import { assertFileSizeOk } from './shared/domain/uploads/uploadLimits';
 import { ImageMarker } from './components/ImageMarker';
 import { PoiDotMarker } from './components/PoiDotMarker';
 import { Toolbar } from './components/Toolbar';
@@ -20,16 +20,16 @@ import { BuildingConnectionsOverlay } from './components/BuildingConnectionsOver
 import Shuffle from './components/Shuffle';
 import { AddBuildingModal } from './components/AddBuildingModal';
 import { GallerySection } from './components/GallerySection';
-import { continentKeyFromLatLng } from './utils/geoStats';
-import { buildGeocodeQueries, hasGeographicHint } from './utils/geoFromBuildingName';
+import { continentKeyFromLatLng } from './shared/domain/geo/geoStats';
+import { buildGeocodeQueries, hasGeographicHint } from './shared/domain/geo/geoFromBuildingName';
 import { GalleryDetailModals } from './components/GalleryDetailModals';
 import { MemoryPhotoModal } from './components/MemoryPhotoModal';
 import { MemoryAudioModal } from './components/MemoryAudioModal';
 import { AuthPanel } from './components/AuthPanel';
 import { resolveSessionAnchor, formatCityCountry } from './services/sessionGeo';
-import { normalizeLog } from './utils/normalizeLog';
-import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from './prompts/buildingStyle';
-import type { AudioEntry, LogData, PhotoData, ProcessedImage } from './types/memory';
+import { normalizeLog } from './shared/domain/memory/normalizeLog';
+import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from './shared/domain/building-style/buildingStyle';
+import type { AudioEntry, LogData, PhotoData, ProcessedImage } from './web/app/webMemoryTypes';
 import { useAuth } from './context/AuthContext';
 import {
   loadAllCloudBuildings,
@@ -39,11 +39,9 @@ import {
 } from './services/cloudBuildings';
 import { apiUrl } from './lib/apiBase';
 import { buildReverseGeocodeUrl, deploymentConfig } from './lib/deploymentConfig';
-import { parseReverseGeocodePlace } from './lib/locationAdapters';
+import { parseReverseGeocodePlace } from './shared/domain/geo/locationParsers';
 import { BASEMAP_THEME_OPTIONS, type BasemapThemeId, MapboxAdapter, createMapBounds } from './lib/mapboxAdapter';
 import { loadMapbox } from './lib/mapboxLoader';
-
-export type { AudioEntry, LogData, PhotoData, ProcessedImage } from './types/memory';
 
 /** 侧栏地理文案：Roboto 作为 Google Sans 的可加载替代 */
 const FONT_GOOGLE_SANS = '"Roboto", "Google Sans", system-ui, sans-serif';
@@ -1153,13 +1151,19 @@ const App: React.FC = () => {
     [selectedImageId, images, user?.id, persistCloudImage]
   );
 
-  const handleDeletePhotoFromGallery = useCallback(
-    (memoryId: number, photoIndex: number) => {
+  const handleDeletePhotosFromGallery = useCallback(
+    (memoryId: number, photoIndexes: number[]) => {
       const current = latestImagesRef.current.find((img) => img.id === memoryId);
       if (!current || current.photos.length <= 1) return;
+      const uniqueIndexes = [...new Set(photoIndexes)]
+        .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < current.photos.length)
+        .sort((a, b) => a - b);
+      if (!uniqueIndexes.length) return;
+      if (current.photos.length - uniqueIndexes.length < 1) return;
+      const removeSet = new Set(uniqueIndexes);
       const updated = {
         ...current,
-        photos: current.photos.filter((_, idx) => idx !== photoIndex),
+        photos: current.photos.filter((_, idx) => !removeSet.has(idx)),
       };
       setImages((prev) => prev.map((img) => (img.id === memoryId ? updated : img)));
       void persistCloudImage(updated, { requireLocked: true });
@@ -2014,17 +2018,17 @@ const App: React.FC = () => {
           className="relative flex min-h-0 w-full flex-1 overflow-hidden"
           onPointerDownCapture={handleMapSurfacePointerDown}
         >
-        <div className="absolute top-4 right-4 z-[60] flex items-center gap-1.5 pointer-events-auto" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+        <div className="absolute top-4 right-4 z-[60] flex items-center gap-2 pointer-events-auto" style={{ top: 'calc(env(safe-area-inset-top) + 1.5rem)' }}>
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowBasemapMenu((open) => !open)}
               data-map-ui="basemap-theme"
-              className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+              className="h-[29px] w-[29px] shrink-0 overflow-visible flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Change basemap theme"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <circle cx="13.5" cy="6.5" r=".5" />
                 <circle cx="17.5" cy="10.5" r=".5" />
                 <circle cx="8.5" cy="7.5" r=".5" />
@@ -2064,11 +2068,11 @@ const App: React.FC = () => {
               mapRef.current.setView([a.lat, a.lng], Math.max(6, mapRef.current.getZoom()));
             }}
             data-map-ui="back-to-location"
-            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            className="h-[29px] w-[29px] shrink-0 overflow-visible flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label="Back to my location"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M12 21c4.6-4.1 7-7.4 7-10.2A7 7 0 1 0 5 10.8C5 13.6 7.4 16.9 12 21Z" />
               <circle cx="12" cy="10" r="2.5" />
             </svg>
@@ -2077,7 +2081,7 @@ const App: React.FC = () => {
             type="button"
             onClick={toggleLanguage}
             data-map-ui="language-toggle"
-            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[12px] font-semibold leading-none"
+            className="h-[29px] w-[29px] shrink-0 overflow-visible flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[14px] font-semibold leading-none"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('toggleLanguage')}
           >
@@ -2087,11 +2091,11 @@ const App: React.FC = () => {
             type="button"
             onClick={() => setShowHelpModal(true)}
             data-map-ui="help"
-            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            className="h-[29px] w-[29px] shrink-0 overflow-visible flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('showHelp')}
           >
-            <span className="text-[14px] font-medium leading-none" aria-hidden>?</span>
+            <span className="text-[16px] font-medium leading-none" aria-hidden>?</span>
           </button>
         </div>
 
@@ -2101,7 +2105,7 @@ const App: React.FC = () => {
           className="absolute inset-0 z-[1] h-full w-full min-h-[40vh] echo-map-shell"
           style={{ opacity: mapReferenceOpacity }}
         />
-        {echoTab === 'home' && mapState.isReady && mapRef.current && (
+        {mapState.isReady && mapRef.current && (
           <BuildingConnectionsOverlay
             map={mapRef.current}
             mapViewportTick={mapViewportTick}
@@ -2111,12 +2115,12 @@ const App: React.FC = () => {
           />
         )}
 
-        {echoTab === 'home' && mapState.isReady && mapRef.current && (
-          <div className="absolute top-4 left-4 z-30 flex flex-col gap-1 pointer-events-auto" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+        {mapState.isReady && mapRef.current && (
+          <div className="absolute top-4 left-4 z-[60] flex flex-col gap-1 pointer-events-auto" style={{ top: 'calc(env(safe-area-inset-top) + 1.5rem)' }}>
             <button
               type="button"
               data-map-ui="zoom-in"
-              className="w-8 h-8 border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
+              className="h-[26px] w-[26px] border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Zoom in"
               onClick={() => {
@@ -2132,7 +2136,7 @@ const App: React.FC = () => {
             <button
               type="button"
               data-map-ui="zoom-out"
-              className="w-8 h-8 border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
+              className="h-[26px] w-[26px] border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Zoom out"
               onClick={() => {
@@ -2147,11 +2151,11 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {echoTab === 'home' && mapState.isReady && (
+        {mapState.isReady && (
             <SearchControl onLocationSelect={handleLocationSelect} />
         )}
         
-        {echoTab === 'home' && mapState.isReady && mapRef.current && (
+        {mapState.isReady && mapRef.current && (
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
                 {(() => {
                   const mapZoom = mapRef.current!.getZoom();
@@ -2296,11 +2300,11 @@ const App: React.FC = () => {
                     setMapExplored(true);
                     setShowAddBuildingModal(true);
                   }}
-                  className="w-11 h-11 rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
+                  className="h-[29px] w-[29px] shrink-0 overflow-visible rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
                   style={{ borderWidth: MAP_ICON_BORDER_PX }}
                   aria-label={t('hammerAddBuilding')}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                       <rect x="4" y="8.6" width="16" height="10.4" rx="2" />
                       <circle cx="12" cy="13.5" r="2.2" />
                       <path d="M12 1.2v8.2" />
@@ -2310,11 +2314,11 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => void handleExport()}
-                  className="w-11 h-11 rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
+                  className="h-[29px] w-[29px] shrink-0 overflow-visible rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
                   style={{ borderWidth: MAP_ICON_BORDER_PX }}
                   aria-label={t('exportMap')}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
@@ -2513,11 +2517,11 @@ const App: React.FC = () => {
         openM04={galleryOpenM04}
         photos={galleryBuilding?.photos ?? []}
         audioEntries={galleryBuilding?.audioEntries ?? []}
-        onDeletePhoto={
+        onDeletePhotos={
           galleryDetailId === null
             ? undefined
-            : (photoIndex) => {
-                handleDeletePhotoFromGallery(galleryDetailId, photoIndex);
+            : (photoIndexes) => {
+                handleDeletePhotosFromGallery(galleryDetailId, photoIndexes);
               }
         }
         log={

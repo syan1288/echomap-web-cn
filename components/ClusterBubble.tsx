@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ProcessedImage } from '../App';
+import type { ProcessedImage } from '../web/app/webMemoryTypes';
 
 export interface Cluster {
   id: string;

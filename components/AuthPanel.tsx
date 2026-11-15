@@ -18,13 +18,19 @@ function GlassInput({
   placeholder,
   leftIcon,
   onSubmit,
+  autoComplete,
+  inputMode,
+  showSubmit = false,
 }: {
-  type: 'email' | 'password';
+  type: 'email' | 'password' | 'tel' | 'text';
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   leftIcon: React.ReactNode;
   onSubmit: () => void;
+  autoComplete?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+  showSubmit?: boolean;
 }) {
   return (
     <div
@@ -34,7 +40,8 @@ function GlassInput({
       <span className="shrink-0 text-black">{leftIcon}</span>
       <input
         type={type}
-        autoComplete={type === 'email' ? 'email' : 'current-password'}
+        autoComplete={autoComplete ?? (type === 'email' ? 'email' : type === 'password' ? 'current-password' : 'off')}
+        inputMode={inputMode}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -44,7 +51,7 @@ function GlassInput({
           if (e.key === 'Enter') onSubmit();
         }}
       />
-      {type === 'password' && (
+      {showSubmit && (
         <button
           type="button"
           onClick={onSubmit}
@@ -62,11 +69,15 @@ function GlassInput({
 
 export const AuthPanel: React.FC<AuthPanelProps> = () => {
   const { t } = useLocalization();
-  const { configured, loading, user, signInWithEmail, signUpWithEmail } = useAuth();
+  const { configured, loading, user, signInWithEmail, signUpWithEmail, signInWithPhoneOtp, verifyPhoneOtp } = useAuth();
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
+  const [channel, setChannel] = useState<'email' | 'phone'>('email');
   const [expanded, setExpanded] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [registerConfirmShown, setRegisterConfirmShown] = useState(false);
@@ -80,6 +91,22 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
     if (mode === 'signIn') setRegisterConfirmShown(false);
     setBusy(true);
     try {
+      if (channel === 'phone') {
+        if (!phoneOtpSent) {
+          const r = await signInWithPhoneOtp(phone);
+          if (!r.ok) {
+            setHint(r.message);
+            return;
+          }
+          setPhoneOtpSent(true);
+          setHint(t('authPhoneCodeSent'));
+          return;
+        }
+        const r = await verifyPhoneOtp(phone, phoneCode);
+        if (!r.ok) setHint(r.message);
+        return;
+      }
+
       const fn = mode === 'signIn' ? signInWithEmail : signUpWithEmail;
       const r = await fn(email, password);
       if (!r.ok) {
@@ -143,32 +170,106 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
 
       {expanded && (
         <>
-          <GlassInput
-            type="email"
-            value={email}
-            onChange={setEmail}
-            placeholder={t('authEmailPlaceholder')}
-            onSubmit={submit}
-            leftIcon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="6" width="18" height="12" rx="2" />
-                <path d="m4 8 8 6 8-6" />
-              </svg>
-            }
-          />
-          <GlassInput
-            type="password"
-            value={password}
-            onChange={setPassword}
-            placeholder={t('authPasswordPlaceholder')}
-            onSubmit={submit}
-            leftIcon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="10" cy="11" r="4" />
-                <path d="m13 14 7 7" />
-              </svg>
-            }
-          />
+          <div
+            className="grid w-full grid-cols-2 rounded-full border border-white/65 bg-white/45 p-1 text-[12px]"
+            style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
+          >
+            {[
+              ['email', t('authUseEmail')],
+              ['phone', t('authUsePhone')],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className="h-8 rounded-full border-0 cursor-pointer transition-colors"
+                style={{
+                  background: channel === id ? '#fff' : 'transparent',
+                  color: channel === id ? '#111' : 'rgba(0,0,0,0.58)',
+                }}
+                onClick={() => {
+                  setChannel(id as 'email' | 'phone');
+                  setHint(null);
+                  setRegisterConfirmShown(false);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {channel === 'email' ? (
+            <>
+              <GlassInput
+                type="email"
+                value={email}
+                onChange={setEmail}
+                placeholder={t('authEmailPlaceholder')}
+                onSubmit={submit}
+                leftIcon={
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="6" width="18" height="12" rx="2" />
+                    <path d="m4 8 8 6 8-6" />
+                  </svg>
+                }
+              />
+              <GlassInput
+                type="password"
+                value={password}
+                onChange={setPassword}
+                placeholder={t('authPasswordPlaceholder')}
+                onSubmit={submit}
+                showSubmit
+                leftIcon={
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="10" cy="11" r="4" />
+                    <path d="m13 14 7 7" />
+                  </svg>
+                }
+              />
+            </>
+          ) : (
+            <>
+              <GlassInput
+                type="tel"
+                value={phone}
+                onChange={(value) => {
+                  setPhone(value);
+                  setPhoneOtpSent(false);
+                  setPhoneCode('');
+                }}
+                placeholder={t('authPhonePlaceholder')}
+                onSubmit={submit}
+                autoComplete="tel"
+                inputMode="tel"
+                showSubmit={!phoneOtpSent}
+                leftIcon={
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8 9.6a16 16 0 0 0 6.4 6.4l1.2-1.2a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2Z" />
+                  </svg>
+                }
+              />
+              {phoneOtpSent && (
+                <GlassInput
+                  type="text"
+                  value={phoneCode}
+                  onChange={setPhoneCode}
+                  placeholder={t('authPhoneCodePlaceholder')}
+                  onSubmit={submit}
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  showSubmit
+                  leftIcon={
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="4" y="4" width="16" height="16" rx="2" />
+                      <path d="M9 9h.01" />
+                      <path d="M15 9h.01" />
+                      <path d="M9 15h6" />
+                    </svg>
+                  }
+                />
+              )}
+            </>
+          )}
         </>
       )}
 
@@ -182,7 +283,17 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
       )}
       {expanded && (
         <div className="h-[20px] flex items-center justify-center">
-          {mode === 'signIn' ? (
+          {channel === 'phone' ? (
+            <button
+              type="button"
+              className="border-0 bg-transparent text-[12px] cursor-pointer"
+              style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
+              onClick={submit}
+              disabled={busy}
+            >
+              {phoneOtpSent ? t('authVerifyPhoneCode') : t('authSendPhoneCode')}
+            </button>
+          ) : mode === 'signIn' ? (
             <button
               type="button"
               className="border-0 bg-transparent text-[12px] cursor-pointer"

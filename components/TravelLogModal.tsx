@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { LogData } from '../App';
+import type { LogData } from '../shared/domain/memory/memoryTypes';
 import { MoonFaceAvatar } from './MoonFaceAvatar';
 import { MOON_FACE_MODE_COUNT, normalizeAvatarVariant } from '../utils/moonFacehash';
 
@@ -64,7 +64,7 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-white p-6 border border-black shadow-xl text-black w-full max-w-[720px] min-h-[620px] flex flex-col gap-4"
+        className="bg-white p-6 border border-black shadow-xl text-black w-full max-w-[720px] min-h-[520px] max-h-[calc(100dvh-1.25rem)] overflow-y-auto flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
         style={{ fontFamily: FONT_BODY, fontWeight: 400 }}
       >

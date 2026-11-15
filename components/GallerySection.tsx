@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import type { ProcessedImage } from '../App';
-import { filterBuildings, suggestLabels, type GalleryDim } from '../utils/galleryFilter';
-import { galleryBuildingTitle } from '../utils/buildingLabel';
+import type { ProcessedImage } from '../web/app/webMemoryTypes';
+import { filterBuildings, suggestLabels, type GalleryDim } from '../shared/domain/gallery/galleryFilter';
+import { galleryBuildingTitle } from '../shared/domain/gallery/buildingLabel';
 import { normalizeAvatarVariant } from '../utils/moonFacehash';
 import { GalleryMoonPopover } from './GalleryMoonPopover';
 import { TravelHeatmapCalendar } from './TravelHeatmapCalendar';
@@ -11,17 +11,17 @@ const LABEL_OLIVE = '#4A5A3C';
 const CAROUSEL_DOT = '#756F6C';
 /** 每页建筑格数（2×3）；圆点数为 totalPages + 1 */
 const GALLERY_ITEMS_PER_PAGE = 6;
-/** 统一方格视口（尽量占满栅格列宽），立绘 object-contain */
+/** 统一展示框：所有建筑都落在同一舞台高度内，避免压到标题 */
 const THUMB_FRAME =
-  'relative mx-auto flex aspect-square w-full max-w-[min(100%,200px)] shrink-0 items-center justify-center overflow-hidden sm:max-w-[min(100%,220px)] md:max-w-[min(100%,240px)]';
+  'relative mx-auto flex h-[150px] w-full max-w-[min(100%,280px)] shrink-0 items-center justify-center overflow-visible sm:h-[160px] sm:max-w-[min(100%,300px)] md:h-[172px] md:max-w-[min(100%,320px)]';
 const thumbBoxClass =
-  'flex w-full shrink-0 items-center justify-center overflow-hidden py-1 min-h-0';
-const THUMB_CONTENT_TARGET = 0.78;
+  'flex w-full shrink-0 items-center justify-center overflow-visible px-4 py-1 min-h-0';
 const GALLERY_SEARCH_BORDER_PX = 1.5;
+const CROP_SIDE_PADDING_RATIO = 0.1;
+const CROP_TOP_PADDING_RATIO = 0.08;
+const CROP_BOTTOM_PADDING_RATIO = 0.14;
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+type GalleryThumbSource = { src: string; cropped: boolean };
 
 function mapAlignedBuildingSrc(b: ProcessedImage): string | null {
   return (
@@ -31,29 +31,106 @@ function mapAlignedBuildingSrc(b: ProcessedImage): string | null {
   );
 }
 
-function getGalleryThumbImageStyle(b: ProcessedImage): React.CSSProperties | undefined {
-  const iw = Math.max(1, Number(b.width) || 0);
-  const ih = Math.max(1, Number(b.height) || 0);
-  const raw = b.contentBounds;
-  if (!raw || iw <= 0 || ih <= 0) return undefined;
+function cropImageForGallery(src: string): Promise<GalleryThumbSource> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const sourceWidth = Math.max(1, img.naturalWidth || img.width || 1);
+      const sourceHeight = Math.max(1, img.naturalHeight || img.height || 1);
 
-  const x = clampNumber(Number(raw.x) || 0, 0, iw);
-  const y = clampNumber(Number(raw.y) || 0, 0, ih);
-  const w = clampNumber(Number(raw.width) || iw, 1, iw - x || 1);
-  const h = clampNumber(Number(raw.height) || ih, 1, ih - y || 1);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = sourceWidth;
+        canvas.height = sourceHeight;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) throw new Error('Could not read gallery image pixels');
 
-  const contentOccupancy = Math.max(w / iw, h / ih);
-  // contentBounds 异常时回退默认展示，避免出现裁切/巨幅放大
-  if (contentOccupancy < 0.16 || contentOccupancy > 0.98) return undefined;
+        ctx.drawImage(img, 0, 0, sourceWidth, sourceHeight);
+        const pixels = ctx.getImageData(0, 0, sourceWidth, sourceHeight).data;
+        let minX = sourceWidth;
+        let minY = sourceHeight;
+        let maxX = -1;
+        let maxY = -1;
 
-  // 仅做温和统一，不进行激进放大和偏移
-  const scale = clampNumber(THUMB_CONTENT_TARGET / Math.max(contentOccupancy, 0.01), 0.92, 1.35);
+        for (let y = 0; y < sourceHeight; y += 1) {
+          for (let x = 0; x < sourceWidth; x += 1) {
+            const idx = (y * sourceWidth + x) * 4;
+            const r = pixels[idx];
+            const g = pixels[idx + 1];
+            const b = pixels[idx + 2];
+            const alpha = pixels[idx + 3];
+            if (alpha <= 12) continue;
+            if (r > 246 && g > 246 && b > 246) continue;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
 
-  return {
-    transform: `scale(${scale.toFixed(3)})`,
-    transformOrigin: 'center center',
-  };
+        if (maxX < minX || maxY < minY) {
+          resolve({ src, cropped: false });
+          return;
+        }
+
+        const contentWidth = maxX - minX + 1;
+        const contentHeight = maxY - minY + 1;
+        const sidePadding = Math.max(18, Math.round(contentWidth * CROP_SIDE_PADDING_RATIO));
+        const topPadding = Math.max(14, Math.round(contentHeight * CROP_TOP_PADDING_RATIO));
+        const bottomPadding = Math.max(22, Math.round(contentHeight * CROP_BOTTOM_PADDING_RATIO));
+        const cropX = Math.max(0, minX - sidePadding);
+        const cropY = Math.max(0, minY - topPadding);
+        const cropRight = Math.min(sourceWidth, maxX + sidePadding + 1);
+        const cropBottom = Math.min(sourceHeight, maxY + bottomPadding + 1);
+        const cropWidth = Math.max(1, cropRight - cropX);
+        const cropHeight = Math.max(1, cropBottom - cropY);
+
+        const out = document.createElement('canvas');
+        out.width = cropWidth;
+        out.height = cropHeight;
+        const outCtx = out.getContext('2d');
+        if (!outCtx) throw new Error('Could not crop gallery image');
+        outCtx.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+        resolve({ src: out.toDataURL('image/png'), cropped: true });
+      } catch {
+        resolve({ src, cropped: false });
+      }
+    };
+    img.onerror = () => reject(new Error('Could not load gallery image'));
+    img.src = src;
+  });
 }
+
+const GalleryBuildingThumb: React.FC<{ src: string }> = ({ src }) => {
+  const [thumb, setThumb] = useState<GalleryThumbSource>({ src, cropped: false });
+  useEffect(() => {
+    let active = true;
+    setThumb({ src, cropped: false });
+    cropImageForGallery(src)
+      .then((next) => {
+        if (active) setThumb(next);
+      })
+      .catch(() => {
+        if (active) setThumb({ src, cropped: false });
+      });
+    return () => {
+      active = false;
+    };
+  }, [src]);
+
+  return (
+    <div className={THUMB_FRAME}>
+      <img
+        src={thumb.src}
+        alt=""
+        draggable={false}
+        className="block max-h-full max-w-full select-none object-contain"
+        style={{ transform: thumb.cropped ? undefined : 'scale(1.35)' }}
+      />
+    </div>
+  );
+};
 
 const FILTER_RECENT_KEY = 'echo_gallery_filter_recent';
 
@@ -266,7 +343,6 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
             {pageSlice.map((b) => {
               const title = galleryBuildingTitle(b.log);
               const displaySrc = mapAlignedBuildingSrc(b);
-              const thumbImageStyle = getGalleryThumbImageStyle(b);
               const moon = (b.log.moon ?? '').trim();
               const moonOk = moon.length >= 1 && moon.length <= 64;
               const av = normalizeAvatarVariant(b.log.avatarVariant);
@@ -283,7 +359,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                     >
                       <div className={thumbBoxClass}>
                         <div
-                          className={`${THUMB_FRAME} transition-[filter] duration-200 ease-out group-hover:drop-shadow-[0_0_22px_rgba(255,255,255,0.98)] group-hover:brightness-[1.04]`}
+                          className="w-full transition-[filter] duration-200 ease-out group-hover:drop-shadow-[0_0_22px_rgba(255,255,255,0.98)] group-hover:brightness-[1.04]"
                           onMouseEnter={(e) => {
                             if (moonOk) {
                               setMoonHover({
@@ -296,22 +372,18 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                           onMouseLeave={() => setMoonHover({ el: null, moon: '', avatarVariant: 0 })}
                         >
                           {displaySrc ? (
-                            <img
-                              src={displaySrc}
-                              alt=""
-                              draggable={false}
-                              className="h-full w-full select-none object-contain object-center"
-                              style={thumbImageStyle}
-                            />
+                            <GalleryBuildingThumb src={displaySrc} />
                           ) : (
-                            <span className="text-xs text-[#332115]/70">Generating…</span>
+                            <div className={THUMB_FRAME}>
+                              <span className="text-xs text-[#332115]/70">Generating…</span>
+                            </div>
                           )}
                         </div>
                       </div>
                     </button>
                   </div>
                   <p
-                    className="m-0 mt-2 line-clamp-2 min-h-[2.75rem] w-full shrink-0 break-words px-1 pt-0.5 text-center text-[14px] leading-snug"
+                    className="m-0 mt-1 line-clamp-2 min-h-[3.4rem] w-full shrink-0 break-words px-2 pt-1 text-center text-[14px] leading-snug"
                     style={{
                       color: LABEL_OLIVE,
                       fontFamily: '"Roboto Mono", ui-monospace, monospace',

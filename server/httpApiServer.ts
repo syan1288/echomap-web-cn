@@ -4,7 +4,12 @@ import path from 'node:path';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import generateHandler from '../api/generate.js';
 import geocodeHandler from '../api/geocode.js';
+import generationQuotaHandler from '../api/generation-quota.js';
 import healthHandler from '../api/echo-health.js';
+import paymentsCreateOrderHandler from '../api/payments-create-order.js';
+import paymentsWechatNotifyHandler from '../api/payments-wechat-notify.js';
+import shareMemoriesHandler from '../api/share-memories.js';
+import usageQuotaHandler from '../api/usage-quota.js';
 
 function stripWrappingQuotes(value: string): string {
   if (value.length >= 2) {
@@ -52,8 +57,13 @@ type Handler = (req: VercelRequest, res: VercelResponse) => Promise<void>;
 
 const routes = new Map<string, Handler>([
   ['/api/generate', generateHandler],
+  ['/api/generation-quota', generationQuotaHandler],
   ['/api/geocode', geocodeHandler],
   ['/api/echo-health', healthHandler],
+  ['/api/payments/create-order', paymentsCreateOrderHandler],
+  ['/api/payments/wechat/notify', paymentsWechatNotifyHandler],
+  ['/api/share-memories', shareMemoriesHandler],
+  ['/api/usage-quota', usageQuotaHandler],
 ]);
 
 function sendJson(res: ServerResponse, status: number, body: Record<string, unknown>) {
@@ -92,13 +102,41 @@ function buildRequest(req: IncomingMessage, rawBody: string): VercelRequest {
 
   const request = req as VercelRequest;
   request.body = body;
+  (request as VercelRequest & { rawBody?: string }).rawBody = rawBody;
   request.query = {};
   request.cookies = {};
   return request;
 }
 
 function buildResponse(res: ServerResponse): VercelResponse {
-  return res as VercelResponse;
+  const vRes = res as VercelResponse;
+
+  vRes.status = ((code: number) => {
+    res.statusCode = code;
+    return vRes;
+  }) as VercelResponse['status'];
+
+  vRes.json = ((body: unknown) => {
+    if (!res.headersSent && !res.getHeader('Content-Type')) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    }
+    res.end(JSON.stringify(body));
+    return vRes;
+  }) as VercelResponse['json'];
+
+  vRes.send = ((body: unknown) => {
+    if (typeof body === 'object' && body !== null && !Buffer.isBuffer(body)) {
+      if (!res.headersSent && !res.getHeader('Content-Type')) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      }
+      res.end(JSON.stringify(body));
+      return vRes;
+    }
+    res.end(body as string | Uint8Array);
+    return vRes;
+  }) as VercelResponse['send'];
+
+  return vRes;
 }
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse) {

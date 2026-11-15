@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AudioEntry } from '../types/memory';
+import type { AudioEntry } from '../web/app/webMemoryTypes';
 
 const ICON_STROKE = 1.5;
 const FONT_BODY = '"Roboto Mono", ui-monospace, monospace';
@@ -204,7 +204,7 @@ export const MemoryAudioModal: React.FC<MemoryAudioModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[135] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[220] flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.42)' }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) handleClose();
@@ -226,7 +226,7 @@ export const MemoryAudioModal: React.FC<MemoryAudioModalProps> = ({
       />
 
       <div
-        className="bg-white w-full max-w-[720px] min-h-[520px] border border-black shadow-xl rounded-none overflow-y-auto flex flex-col"
+        className="echo-memory-audio-modal bg-white w-full max-w-[720px] min-h-[520px] border border-black shadow-xl rounded-none overflow-y-auto flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           fontFamily: FONT_BODY,

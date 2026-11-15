@@ -88,7 +88,13 @@ const FloatingCloudsBackdrop: React.FC = () => (
   </div>
 );
 
-export const EchoSidebarBrandIllustration: React.FC<{ className?: string }> = ({ className }) => (
+export const EchoSidebarBrandIllustration: React.FC<{ className?: string; scaleMultiplier?: number }> = ({
+  className,
+  scaleMultiplier = 1,
+}) => {
+  const effectiveScale = SCALE * scaleMultiplier;
+
+  return (
   <div className={`relative w-full overflow-visible ${className ?? ''}`}>
     <div className="relative z-[1] flex w-full justify-center overflow-visible">
       <FloatingCloudsBackdrop />
@@ -97,7 +103,7 @@ export const EchoSidebarBrandIllustration: React.FC<{ className?: string }> = ({
         style={{
           width: '60%',
           maxHeight: `${MAX_BASE_VH}vh`,
-          transform: `scale(${SCALE})`,
+          transform: `scale(${effectiveScale})`,
           transformOrigin: 'top center',
         }}
       >
@@ -106,17 +112,19 @@ export const EchoSidebarBrandIllustration: React.FC<{ className?: string }> = ({
           alt=""
           width={180}
           height={146}
-          decoding="async"
+          decoding="sync"
+          loading="eager"
           draggable={false}
           className="relative z-[1] mx-auto block h-auto w-full object-contain select-none"
-          style={{ maxHeight: `${MAX_BASE_VH}vh` }}
+          style={{ aspectRatio: '180 / 146', maxHeight: `${MAX_BASE_VH}vh` }}
         />
       </div>
     </div>
     <div
       className="w-full shrink-0"
-      style={{ height: `calc(${MAX_BASE_VH}vh * (${SCALE} - 1))` }}
+      style={{ height: `calc(${MAX_BASE_VH}vh * (${effectiveScale} - 1))` }}
       aria-hidden
     />
   </div>
-);
+  );
+};

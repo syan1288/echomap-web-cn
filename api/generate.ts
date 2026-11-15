@@ -4,6 +4,12 @@ import path from 'node:path';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash, createHmac } from 'node:crypto';
+import { getAuthenticatedUser, type HeaderLike } from '../server/authUser.js';
+import {
+  consumeGenerationEntitlement,
+  getGenerationEntitlement,
+  type GenerationEntitlement,
+} from '../server/entitlements.js';
 
 type EchoApiEnv = {
   API_KEY?: string;
@@ -40,6 +46,52 @@ const MAX_JSON_BODY_CHARS = 22 * 1024 * 1024;
 const BUILDING_STYLE_IDS = ['flat', 'pixel', 'ink', 'healing'] as const;
 type BuildingStyleId = (typeof BUILDING_STYLE_IDS)[number];
 const DEFAULT_BUILDING_STYLE: BuildingStyleId = 'flat';
+
+function isQuotaEnabled(): boolean {
+  const raw = process.env.ECHO_GENERATION_QUOTA_ENABLED?.trim().toLowerCase();
+  return raw !== 'false' && raw !== '0' && raw !== 'off';
+}
+
+function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-store');
+  res.end(JSON.stringify(body));
+}
+
+async function authorizeGeneration(req: VercelRequest, res: VercelResponse): Promise<string | null> {
+  if (!isQuotaEnabled()) return null;
+
+  const auth = await getAuthenticatedUser(req.headers as HeaderLike, process.env);
+  if (auth.ok === false) {
+    sendJson(res, auth.status, {
+      error:
+        auth.status === 401
+          ? 'Login required before generating images.'
+          : auth.error,
+      code: auth.status === 401 ? 'AUTH_REQUIRED' : 'AUTH_CONFIG_MISSING',
+    });
+    return null;
+  }
+
+  const entitlement = await getGenerationEntitlement(auth.userId, process.env);
+  if (!entitlement.allowed) {
+    sendJson(res, 402, {
+      error: 'Free generation quota used up. Upgrade or wait until next month.',
+      code: 'GENERATION_QUOTA_EXHAUSTED',
+      entitlement,
+    });
+    return null;
+  }
+
+  return auth.userId;
+}
+
+async function consumeQuotaForSuccess(
+  userId: string | null
+): Promise<GenerationEntitlement | null> {
+  return userId ? consumeGenerationEntitlement(userId, process.env) : null;
+}
 
 function applyCors(req: VercelRequest, res: VercelResponse): void {
   const allow = process.env.ALLOW_ORIGIN?.trim() || '*';
@@ -350,7 +402,13 @@ function resolveJimengConfig(env: EchoApiEnv) {
     ? Math.round(parsedSize)
     : 2048 * 2048;
   const parsedScale = Number(env.JIMENG_SCALE);
-  const scale = Number.isFinite(parsedScale) && parsedScale >= 1 && parsedScale <= 100 ? Math.round(parsedScale) : 50;
+  const scale = Number.isFinite(parsedScale) && parsedScale > 0
+    ? parsedScale <= 1
+      ? Math.round(parsedScale * 100)
+      : parsedScale <= 100
+        ? Math.round(parsedScale)
+        : 65
+    : 65;
   return { accessKeyId, secretAccessKey, baseUrl, reqKey, region, service, size, scale };
 }
 
@@ -376,6 +434,7 @@ async function requestJimengImageEdit(args: {
     req_key: conf.reqKey,
     image_urls: args.imageUrls.slice(0, 14),
     prompt: args.prompt,
+    scale: conf.scale,
   };
   const submitText = JSON.stringify(submitBody);
   const submitSha = sha256Hex(submitText);
@@ -628,7 +687,7 @@ function isBuildingStyleId(s: string | undefined | null): s is BuildingStyleId {
 
 function buildEchoImageSystemInstruction(style: BuildingStyleId = DEFAULT_BUILDING_STYLE): string {
   const base =
-    '仅针对图中主体建筑，创建单体建筑立绘。构图为干净的等距/3D 视角，建筑主体完整，透明背景，无地面、无天空、无人物、无植被、无阴影、无边框，输出 png。整体必须像可收藏的旅行地标建筑插画，而不是儿童画、玩具、贴纸、Q版摆件或卡通表情。颜色克制，避免高饱和霓虹糖果色，避免幼态、廉价、花哨。';
+    '输入照片只作为建筑结构参考，不要保留或复刻原照片画面。仅针对图中主体建筑，创建单体建筑立绘。必须抠出并重绘为一个独立地标建筑资产，构图为干净的等距/3D 视角，建筑主体完整，透明背景或纯白背景，无原照片背景、无地面、无天空、无人物、无车辆、无招牌、无植被、无阴影、无边框，输出 png。整体必须像可收藏的旅行地标建筑插画，而不是照片拼贴、儿童画、玩具、贴纸、Q版摆件或卡通表情。颜色克制，避免高饱和霓虹糖果色，避免幼态、廉价、花哨。';
   switch (style) {
     case 'pixel':
       return `${base} 风格额外约束：像素风必须是真正的像素建筑立绘，边缘清晰，像素块明确，限制色盘，避免平滑渐变、模糊、发光特效和手游儿童皮肤感。`;
@@ -662,14 +721,16 @@ function buildUserStyleReminder(style: BuildingStyleId): string {
 
 function buildInitialUserPromptWithStyle(buildingName: string | undefined, style: BuildingStyleId): string {
   const trimmed = buildingName?.trim();
+  const extractionInstruction =
+    '请把输入照片中的主体建筑提取为独立建筑资产；输入照片只用于识别建筑外形和细节，输出画面不能包含原照片背景、人物、天空、地面、游客、车辆、招牌或场景拼贴。';
   return trimmed
-    ? `建筑名称参考：${trimmed}。请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`
-    : `请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`;
+    ? `建筑名称参考：${trimmed}。${extractionInstruction} 请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`
+    : `${extractionInstruction} 请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`;
 }
 
 function buildEditUserPrompt(editInstruction: string, buildingName?: string, style: BuildingStyleId = DEFAULT_BUILDING_STYLE): string {
   const extra = buildingName?.trim() ? ` 建筑名称参考：${buildingName.trim()}。` : '';
-  return `${editInstruction.trim()}${extra} 请保留原建筑的可识别地标特征，只在现有结构上调整。风格要求：${buildUserStyleReminder(style)}`.trim();
+  return `${editInstruction.trim()}${extra} 输入照片只作为建筑结构参考，输出不能包含原照片背景、人物、天空、地面、游客、车辆、招牌或场景拼贴。请保留原建筑的可识别地标特征，只在现有结构上调整。风格要求：${buildUserStyleReminder(style)}`.trim();
 }
 
 function extractInlineImageFromResponse(response: {
@@ -757,6 +818,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  const quotaUserId = await authorizeGeneration(req, res);
+  if (isQuotaEnabled() && !quotaUserId) return;
+
   try {
     const env = envFromProcess();
     const wantsJimeng = body.preferredModel === 'jimeng';
@@ -798,6 +862,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         mimeType: body.mimeType || 'image/jpeg',
         prompt: stitchedPrompt,
       });
+      const entitlement = await consumeQuotaForSuccess(quotaUserId);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Cache-Control', 'no-store');
@@ -807,6 +872,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           model: openai.model,
           requestedModel: body.preferredModel || 'gemini',
           backend: openai.backend,
+          entitlement,
         })
       );
       return;
@@ -817,6 +883,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         imageUrls: body.imageUrls ?? [],
         prompt: stitchedPrompt,
       });
+      const entitlement = await consumeQuotaForSuccess(quotaUserId);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Cache-Control', 'no-store');
@@ -826,6 +893,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           model: jimeng.model,
           requestedModel: body.preferredModel || 'gemini',
           backend: jimeng.backend,
+          entitlement,
         })
       );
       return;
@@ -881,6 +949,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.statusCode = 'error' in extracted ? 500 : 200;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
+    const entitlement = 'error' in extracted ? null : await consumeQuotaForSuccess(quotaUserId);
     res.end(
       JSON.stringify(
         'error' in extracted
@@ -890,6 +959,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
               model: imageModel,
               requestedModel: body.preferredModel || 'gemini',
               backend: env.GOOGLE_CLOUD_PROJECT ? 'vertex-ai' : 'google-genai',
+              entitlement,
             }
       )
     );
