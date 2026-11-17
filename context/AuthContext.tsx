@@ -11,8 +11,6 @@ type AuthContextValue = {
   user: User | null;
   signInWithEmail: (email: string, password: string) => Promise<AuthResult>;
   signUpWithEmail: (email: string, password: string) => Promise<AuthResult>;
-  signInWithPhoneOtp: (phone: string) => Promise<AuthResult>;
-  verifyPhoneOtp: (phone: string, token: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
 };
 
@@ -23,16 +21,6 @@ function errMessage(err: AuthError | null): string {
   if (err.message === 'Invalid login credentials') return 'Email or password is incorrect';
   if (err.message.includes('Email not confirmed')) return 'Please confirm your email before signing in';
   return err.message;
-}
-
-function normalizePhoneForAuth(input: string): string {
-  const compact = input.trim().replace(/[\s()-]/g, '');
-  if (!compact) return '';
-  if (compact.startsWith('+')) return compact;
-  const digits = compact.replace(/\D/g, '');
-  if (/^1\d{10}$/.test(digits)) return `+86${digits}`;
-  if (/^86\d{11}$/.test(digits)) return `+${digits}`;
-  return compact;
 }
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -83,34 +71,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { ok: true };
   }, []);
 
-  const signInWithPhoneOtp = useCallback(async (phone: string): Promise<AuthResult> => {
-    if (!supabase) return { ok: false, message: 'Supabase is not configured' };
-    const normalized = normalizePhoneForAuth(phone);
-    if (!normalized) return { ok: false, message: 'Please enter a phone number' };
-    if (!normalized.startsWith('+')) return { ok: false, message: 'Please enter phone number with country code, for example +8613812345678' };
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: normalized,
-      options: { shouldCreateUser: true },
-    });
-    if (error) return { ok: false, message: errMessage(error) };
-    return { ok: true };
-  }, []);
-
-  const verifyPhoneOtp = useCallback(async (phone: string, token: string): Promise<AuthResult> => {
-    if (!supabase) return { ok: false, message: 'Supabase is not configured' };
-    const normalized = normalizePhoneForAuth(phone);
-    const trimmedToken = token.trim().replace(/\s/g, '');
-    if (!normalized) return { ok: false, message: 'Please enter a phone number' };
-    if (!trimmedToken) return { ok: false, message: 'Please enter the verification code' };
-    const { error } = await supabase.auth.verifyOtp({
-      phone: normalized,
-      token: trimmedToken,
-      type: 'sms',
-    });
-    if (error) return { ok: false, message: errMessage(error) };
-    return { ok: true };
-  }, []);
-
   const signOut = useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -124,11 +84,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       user: session?.user ?? null,
       signInWithEmail,
       signUpWithEmail,
-      signInWithPhoneOtp,
-      verifyPhoneOtp,
       signOut,
     }),
-    [loading, session, signInWithEmail, signInWithPhoneOtp, signUpWithEmail, signOut, verifyPhoneOtp]
+    [loading, session, signInWithEmail, signUpWithEmail, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

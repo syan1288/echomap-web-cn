@@ -11,6 +11,7 @@ export type EntitlementEnv = {
   ECHO_ENTITLEMENTS_STORE_PATH?: string;
   ECHO_ENTITLEMENTS_TABLE?: string;
   SUPABASE_URL?: string;
+  SUPABASE_SECRET_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   SUPABASE_ANON_KEY?: string;
   VITE_SUPABASE_URL?: string;
@@ -226,9 +227,9 @@ export class SupabaseEntitlementStore implements EntitlementStoreAdapter {
 
   constructor(env: EntitlementEnv = process.env) {
     const url = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
-    const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+    const key = (env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
     if (!url || !key) {
-      throw new Error('Supabase entitlement store requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+      throw new Error('Supabase entitlement store requires SUPABASE_URL and a server-side Supabase key');
     }
     this.client = createClient(url, key, { auth: { persistSession: false } });
     this.tableName = env.ECHO_ENTITLEMENTS_TABLE?.trim() || 'echo_entitlements';

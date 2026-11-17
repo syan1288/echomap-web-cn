@@ -52,7 +52,6 @@ import './MobileShell.css';
 
 type MobileTab = 'home' | 'map' | 'gallery' | 'setting';
 type LoginMode = 'intro' | 'signup' | 'signin';
-type LoginChannel = 'email' | 'phone';
 type MobileModelId = 'jimeng' | 'gemini' | 'chat-image-2';
 type SettingSubview = 'main' | 'account' | 'privacy';
 type ProfileEditField = 'name' | 'phone' | 'email';
@@ -195,14 +194,10 @@ const MOBILE_COPY = {
     email: 'Email',
     phone: 'Phone',
     password: 'Password',
-    phoneCode: 'Code',
     enterEchoMap: 'Enter Echo Map',
-    sendPhoneCode: 'Send phone code',
-    verifyPhoneCode: 'Verify code',
     forgetPassword: 'Forget password',
     checkEmail: 'Check your email to confirm',
     supabaseMissing: 'Supabase is not configured',
-    verificationSent: 'Verification code sent',
     home: 'Home',
     map: 'Map',
     gallery: 'Gallery',
@@ -283,14 +278,10 @@ const MOBILE_COPY = {
     email: '邮箱',
     phone: '手机',
     password: '密码',
-    phoneCode: '验证码',
     enterEchoMap: '进入 Echo Map',
-    sendPhoneCode: '发送手机验证码',
-    verifyPhoneCode: '验证登录',
     forgetPassword: '忘记密码',
     checkEmail: '请查收邮件确认',
     supabaseMissing: '未配置 Supabase',
-    verificationSent: '验证码已发送',
     home: '首页',
     map: '地图',
     gallery: '相册',
@@ -1251,14 +1242,10 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
 }
 
 function LoginScreen({ onComplete }: { onComplete: () => void }) {
-  const { configured, loading, user, signInWithEmail, signInWithPhoneOtp, signUpWithEmail, verifyPhoneOtp } = useAuth();
+  const { configured, loading, user, signInWithEmail, signUpWithEmail } = useAuth();
   const { language } = useLocalization();
   const [mode, setMode] = useState<LoginMode>('intro');
-  const [channel, setChannel] = useState<LoginChannel>('email');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [phoneCode, setPhoneCode] = useState('');
-  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
@@ -1277,22 +1264,6 @@ function LoginScreen({ onComplete }: { onComplete: () => void }) {
     }
     setBusy(true);
     try {
-      if (channel === 'phone') {
-        const result = phoneOtpSent
-          ? await verifyPhoneOtp(phone, phoneCode)
-          : await signInWithPhoneOtp(phone);
-        if (!result.ok) {
-          setHint(result.message);
-          return;
-        }
-        if (phoneOtpSent) {
-          onComplete();
-          return;
-        }
-        setPhoneOtpSent(true);
-        setHint(copy.verificationSent);
-        return;
-      }
       const result =
         mode === 'signin'
           ? await signInWithEmail(email, password)
@@ -1309,7 +1280,7 @@ function LoginScreen({ onComplete }: { onComplete: () => void }) {
     } finally {
       setBusy(false);
     }
-  }, [channel, configured, copy, email, mode, onComplete, password, phone, phoneCode, phoneOtpSent, signInWithEmail, signInWithPhoneOtp, signUpWithEmail, verifyPhoneOtp]);
+  }, [configured, copy, email, mode, onComplete, password, signInWithEmail, signUpWithEmail]);
 
   return (
     <div className="mobile-screen flex min-h-[100dvh] flex-col items-center px-8 pb-8 pt-[15dvh]" style={{ background: SKY_BLUE }}>
@@ -1339,28 +1310,7 @@ function LoginScreen({ onComplete }: { onComplete: () => void }) {
               <EchoPencilIcon strokeWidth={2} />
             </RoundButton>
           </div>
-          <div className="mb-5 grid grid-cols-2 overflow-hidden rounded-full bg-white/55 p-1 text-[14px]" style={{ fontFamily: UI_FONT }}>
-            {[
-              ['email', copy.email],
-              ['phone', copy.phone],
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={`h-9 rounded-full border-0 ${channel === id ? 'bg-white text-black shadow-sm' : 'bg-transparent text-black/55'}`}
-                onClick={() => {
-                  setChannel(id as LoginChannel);
-                  setHint(null);
-                  setPhoneOtpSent(false);
-                  setPhoneCode('');
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {channel === 'email' ? (
-            <>
+          <>
               <label className="relative mb-5 block">
                 <span className="absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black">
                   <EchoMailIcon strokeWidth={2} />
@@ -1393,52 +1343,8 @@ function LoginScreen({ onComplete }: { onComplete: () => void }) {
                 </button>
               </label>
             </>
-          ) : (
-            <label className="relative block">
-              <span className="absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black">
-                <IconAccount size={24} />
-              </span>
-              <input
-                className="h-[50px] w-full rounded-full border-0 bg-white px-14 text-[16px] outline-none"
-                aria-label={copy.phone}
-                type="tel"
-                autoComplete="tel"
-                placeholder="+86 178..."
-                value={phone}
-                onChange={(event) => {
-                  setPhone(event.target.value);
-                  setPhoneOtpSent(false);
-                  setPhoneCode('');
-                }}
-                disabled={loading || busy}
-              />
-              <button type="submit" disabled={loading || busy} className="absolute right-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black disabled:opacity-40" aria-label={copy.sendPhoneCode}>
-                <EchoArrowRightIcon strokeWidth={2.4} />
-              </button>
-            </label>
-          )}
-          {channel === 'phone' && phoneOtpSent && (
-            <label className="relative mt-5 block">
-              <span className="absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black">
-                <EchoKeyIcon strokeWidth={2.2} />
-              </span>
-              <input
-                className="h-[50px] w-full rounded-full border-0 bg-white px-14 text-[16px] outline-none"
-                aria-label={copy.phoneCode}
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={phoneCode}
-                onChange={(event) => setPhoneCode(event.target.value)}
-                disabled={loading || busy}
-              />
-              <button type="submit" disabled={loading || busy} className="absolute right-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black disabled:opacity-40" aria-label={copy.verifyPhoneCode}>
-                <EchoArrowRightIcon strokeWidth={2.4} />
-              </button>
-            </label>
-          )}
           <p className="m-0 mt-5 text-right text-[16px]" style={{ color: BRAND_BLUE }}>
-            {hint ?? (channel === 'phone' ? (phoneOtpSent ? copy.verifyPhoneCode : copy.sendPhoneCode) : mode === 'signup' ? copy.checkEmail : copy.forgetPassword)}
+            {hint ?? (mode === 'signup' ? copy.checkEmail : copy.forgetPassword)}
           </p>
         </form>
       )}

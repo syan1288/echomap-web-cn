@@ -18,44 +18,39 @@ function GlassInput({
   placeholder,
   leftIcon,
   onSubmit,
-  autoComplete,
-  inputMode,
   showSubmit = false,
 }: {
-  type: 'email' | 'password' | 'tel' | 'text';
+  type: 'email' | 'password';
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
   placeholder: string;
   leftIcon: React.ReactNode;
   onSubmit: () => void;
-  autoComplete?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
   showSubmit?: boolean;
 }) {
   return (
     <div
-      className="w-full h-11 rounded-full border border-white/70 bg-white/55 backdrop-blur-md flex items-center gap-2 px-3"
+      className="flex h-11 w-full items-center gap-2 rounded-full border border-white/70 bg-white/55 px-3 backdrop-blur-md"
       style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)' }}
     >
       <span className="shrink-0 text-black">{leftIcon}</span>
       <input
         type={type}
-        autoComplete={autoComplete ?? (type === 'email' ? 'email' : type === 'password' ? 'current-password' : 'off')}
-        inputMode={inputMode}
+        autoComplete={type === 'email' ? 'email' : 'current-password'}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-[#1d1d1d] outline-none"
         style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onSubmit();
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') onSubmit();
         }}
       />
       {showSubmit && (
         <button
           type="button"
           onClick={onSubmit}
-          className="h-7 w-7 rounded-full border-0 bg-transparent flex items-center justify-center cursor-pointer hover:bg-black/5"
+          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent hover:bg-black/5"
           aria-label="submit auth"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
@@ -69,51 +64,27 @@ function GlassInput({
 
 export const AuthPanel: React.FC<AuthPanelProps> = () => {
   const { t } = useLocalization();
-  const { configured, loading, user, signInWithEmail, signUpWithEmail, signInWithPhoneOtp, verifyPhoneOtp } = useAuth();
+  const { configured, loading, user, signInWithEmail, signUpWithEmail } = useAuth();
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
-  const [channel, setChannel] = useState<'email' | 'phone'>('email');
   const [expanded, setExpanded] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
-  const [phoneCode, setPhoneCode] = useState('');
-  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [registerConfirmShown, setRegisterConfirmShown] = useState(false);
 
-  if (!configured) return null;
-  if (loading) return null;
-  if (user) return null;
+  if (!configured || loading || user) return null;
 
   const submit = async () => {
     setHint(null);
     if (mode === 'signIn') setRegisterConfirmShown(false);
     setBusy(true);
     try {
-      if (channel === 'phone') {
-        if (!phoneOtpSent) {
-          const r = await signInWithPhoneOtp(phone);
-          if (!r.ok) {
-            setHint(r.message);
-            return;
-          }
-          setPhoneOtpSent(true);
-          setHint(t('authPhoneCodeSent'));
-          return;
-        }
-        const r = await verifyPhoneOtp(phone, phoneCode);
-        if (!r.ok) setHint(r.message);
-        return;
-      }
-
-      const fn = mode === 'signIn' ? signInWithEmail : signUpWithEmail;
-      const r = await fn(email, password);
-      if (!r.ok) {
-        setHint(r.message);
-        return;
-      }
-      if (mode === 'signUp') {
+      const authenticate = mode === 'signIn' ? signInWithEmail : signUpWithEmail;
+      const result = await authenticate(email, password);
+      if (!result.ok) {
+        setHint(result.message);
+      } else if (mode === 'signUp') {
         setRegisterConfirmShown(true);
       }
     } finally {
@@ -122,7 +93,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
   };
 
   return (
-    <div className="flex flex-col items-center gap-3 w-full">
+    <div className="flex w-full flex-col items-center gap-3">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -132,7 +103,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
             setRegisterConfirmShown(false);
             setExpanded(true);
           }}
-          className="h-11 w-11 rounded-full border border-white/65 flex items-center justify-center cursor-pointer transition-colors"
+          className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/65 transition-colors"
           style={{
             background: mode === 'signIn' ? BRAND_BLUE : 'rgba(255,255,255,0.75)',
             color: mode === 'signIn' ? '#fff' : '#111',
@@ -153,7 +124,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
             setRegisterConfirmShown(false);
             setExpanded(true);
           }}
-          className="h-11 w-11 rounded-full border border-white/65 flex items-center justify-center cursor-pointer transition-colors"
+          className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/65 transition-colors"
           style={{
             background: mode === 'signUp' ? BRAND_BLUE : 'rgba(255,255,255,0.75)',
             color: mode === 'signUp' ? '#fff' : '#111',
@@ -170,133 +141,50 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
 
       {expanded && (
         <>
-          <div
-            className="grid w-full grid-cols-2 rounded-full border border-white/65 bg-white/45 p-1 text-[12px]"
-            style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
-          >
-            {[
-              ['email', t('authUseEmail')],
-              ['phone', t('authUsePhone')],
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className="h-8 rounded-full border-0 cursor-pointer transition-colors"
-                style={{
-                  background: channel === id ? '#fff' : 'transparent',
-                  color: channel === id ? '#111' : 'rgba(0,0,0,0.58)',
-                }}
-                onClick={() => {
-                  setChannel(id as 'email' | 'phone');
-                  setHint(null);
-                  setRegisterConfirmShown(false);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {channel === 'email' ? (
-            <>
-              <GlassInput
-                type="email"
-                value={email}
-                onChange={setEmail}
-                placeholder={t('authEmailPlaceholder')}
-                onSubmit={submit}
-                leftIcon={
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="6" width="18" height="12" rx="2" />
-                    <path d="m4 8 8 6 8-6" />
-                  </svg>
-                }
-              />
-              <GlassInput
-                type="password"
-                value={password}
-                onChange={setPassword}
-                placeholder={t('authPasswordPlaceholder')}
-                onSubmit={submit}
-                showSubmit
-                leftIcon={
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="10" cy="11" r="4" />
-                    <path d="m13 14 7 7" />
-                  </svg>
-                }
-              />
-            </>
-          ) : (
-            <>
-              <GlassInput
-                type="tel"
-                value={phone}
-                onChange={(value) => {
-                  setPhone(value);
-                  setPhoneOtpSent(false);
-                  setPhoneCode('');
-                }}
-                placeholder={t('authPhonePlaceholder')}
-                onSubmit={submit}
-                autoComplete="tel"
-                inputMode="tel"
-                showSubmit={!phoneOtpSent}
-                leftIcon={
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8 9.6a16 16 0 0 0 6.4 6.4l1.2-1.2a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2Z" />
-                  </svg>
-                }
-              />
-              {phoneOtpSent && (
-                <GlassInput
-                  type="text"
-                  value={phoneCode}
-                  onChange={setPhoneCode}
-                  placeholder={t('authPhoneCodePlaceholder')}
-                  onSubmit={submit}
-                  autoComplete="one-time-code"
-                  inputMode="numeric"
-                  showSubmit
-                  leftIcon={
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="4" y="4" width="16" height="16" rx="2" />
-                      <path d="M9 9h.01" />
-                      <path d="M15 9h.01" />
-                      <path d="M9 15h6" />
-                    </svg>
-                  }
-                />
-              )}
-            </>
-          )}
+          <GlassInput
+            type="email"
+            value={email}
+            onChange={setEmail}
+            placeholder={t('authEmailPlaceholder')}
+            onSubmit={submit}
+            leftIcon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="6" width="18" height="12" rx="2" />
+                <path d="m4 8 8 6 8-6" />
+              </svg>
+            }
+          />
+          <GlassInput
+            type="password"
+            value={password}
+            onChange={setPassword}
+            placeholder={t('authPasswordPlaceholder')}
+            onSubmit={submit}
+            showSubmit
+            leftIcon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="10" cy="11" r="4" />
+                <path d="m13 14 7 7" />
+              </svg>
+            }
+          />
         </>
       )}
 
       {hint && (
         <p
-          className="m-0 text-[12px] text-center"
+          className="m-0 text-center text-[12px]"
           style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
         >
           {hint}
         </p>
       )}
       {expanded && (
-        <div className="h-[20px] flex items-center justify-center">
-          {channel === 'phone' ? (
+        <div className="flex h-[20px] items-center justify-center">
+          {mode === 'signIn' ? (
             <button
               type="button"
-              className="border-0 bg-transparent text-[12px] cursor-pointer"
-              style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
-              onClick={submit}
-              disabled={busy}
-            >
-              {phoneOtpSent ? t('authVerifyPhoneCode') : t('authSendPhoneCode')}
-            </button>
-          ) : mode === 'signIn' ? (
-            <button
-              type="button"
-              className="border-0 bg-transparent text-[12px] cursor-pointer"
+              className="cursor-pointer border-0 bg-transparent text-[12px]"
               style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
             >
               Forget password

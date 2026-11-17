@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test:phone-auth": "node --test tests/phone-otp-login.test.js",
     "test:entitlements": "node --import tsx --test server/authUser.test.ts server/entitlements.test.ts server/paymentOrders.test.ts server/wechatPayNotify.test.ts server/usageQuotaApiCore.test.ts",
     "grant:credits": "node --import tsx ./scripts/grant-credits.ts",
     "preview": "vite preview",

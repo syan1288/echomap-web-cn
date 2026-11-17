@@ -35,10 +35,14 @@ Server env:
 ECHO_ENTITLEMENTS_STORE=supabase
 ECHO_ENTITLEMENTS_TABLE=echo_entitlements
 SUPABASE_URL=https://your-project.supabase.co
+# Prefer the current Supabase Secret API key. Keep it server-side only.
+SUPABASE_SECRET_KEY=your_secret_key
+# Legacy projects may continue using the service_role key.
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` must stay server-side only.
+Both server keys must stay server-side only. The client-facing anon/publishable
+key cannot write entitlement records under the table's RLS policy.
 
 ## Quota Semantics
 

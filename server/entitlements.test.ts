@@ -6,10 +6,12 @@ import test from 'node:test';
 import {
   consumeGenerationEntitlement,
   consumeUsageEntitlement,
+  createEntitlementStore,
   grantExtraCredits,
   getGenerationEntitlement,
   getUsageEntitlement,
   releaseUsageEntitlement,
+  SupabaseEntitlementStore,
   type EntitlementStoreAdapter,
   type EntitlementEnv,
   type UserEntitlementRecord,
@@ -237,4 +239,14 @@ test('entitlements can read and write through an injected store adapter', async 
   assert.equal(result.allowed, true);
   assert.equal(result.usage.landmarkCount, 1);
   assert.deepEqual(writes, ['adapter_user']);
+});
+
+test('Supabase entitlement store accepts the current secret key env name', () => {
+  const env = {
+    ECHO_ENTITLEMENTS_STORE: 'supabase',
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_test_key',
+  } as EntitlementEnv;
+
+  assert.ok(createEntitlementStore(env) instanceof SupabaseEntitlementStore);
 });

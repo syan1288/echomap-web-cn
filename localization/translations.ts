@@ -166,13 +166,6 @@ export const translations: { [key: string]: { [lang in Language]: string } } = {
   authSignUp: { en: 'Register', zh: '注册' },
   authEmailPlaceholder: { en: 'Email', zh: '邮箱' },
   authPasswordPlaceholder: { en: 'Password', zh: '密码' },
-  authPhonePlaceholder: { en: 'Phone number', zh: '手机号' },
-  authPhoneCodePlaceholder: { en: 'Verification code', zh: '验证码' },
-  authUseEmail: { en: 'Email', zh: '邮箱' },
-  authUsePhone: { en: 'Phone', zh: '手机' },
-  authSendPhoneCode: { en: 'Send code', zh: '发送验证码' },
-  authVerifyPhoneCode: { en: 'Verify code', zh: '验证登录' },
-  authPhoneCodeSent: { en: 'Verification code sent', zh: '验证码已发送' },
   authSubmitSignIn: { en: 'Sign in', zh: '登录' },
   authSubmitSignUp: { en: 'Create account', zh: '创建账号' },
   authCheckEmail: {
