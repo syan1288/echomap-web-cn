@@ -49,7 +49,13 @@ import { apiUrl } from './lib/apiBase';
 import type { ImageProvider, ImageProviderAvailability } from './services/imageProviderAvailability';
 import { buildReverseGeocodeUrl, deploymentConfig } from './lib/deploymentConfig';
 import { parseReverseGeocodePlace } from './shared/domain/geo/locationParsers';
-import { BASEMAP_THEME_OPTIONS, type BasemapThemeId, MapboxAdapter, createMapBounds } from './lib/mapboxAdapter';
+import {
+  BASEMAP_THEME_OPTIONS,
+  type BasemapThemeId,
+  MapboxAdapter,
+  createMapBounds,
+  createRasterFallbackStyle,
+} from './lib/mapboxAdapter';
 import { loadMapbox } from './lib/mapboxLoader';
 
 /** 侧栏地理文案：Roboto 作为 Google Sans 的可加载替代 */
@@ -620,6 +626,10 @@ const App: React.FC = () => {
           minZoom: 1,
           maxZoom: 18,
           style: deploymentConfig.mapboxStyle,
+          fallbackStyle: createRasterFallbackStyle(
+            deploymentConfig.mapTileUrl,
+            deploymentConfig.mapTileAttribution
+          ),
         });
         map.setBasemapTheme(basemapTheme);
         map.applyEditorialStyle();

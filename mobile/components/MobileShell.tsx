@@ -36,7 +36,14 @@ import { MoonFaceAvatar } from '../../components/MoonFaceAvatar';
 import { EchoSidebarBrandIllustration } from '../../components/EchoSidebarBrandIllustration';
 import { SidebarNoiseCanvas } from '../../components/SidebarNoiseCanvas';
 import { deploymentConfig } from '../../lib/deploymentConfig';
-import { BASEMAP_THEME_OPTIONS, getPoiDotColor, getPoiDotSize, type BasemapThemeId, MapboxAdapter } from '../../lib/mapboxAdapter';
+import {
+  BASEMAP_THEME_OPTIONS,
+  getPoiDotColor,
+  getPoiDotSize,
+  type BasemapThemeId,
+  MapboxAdapter,
+  createRasterFallbackStyle,
+} from '../../lib/mapboxAdapter';
 import { loadMapbox, prewarmMapbox } from '../../lib/mapboxLoader';
 import { apiUrl } from '../../lib/apiBase';
 import { scheduleDeadline } from '../../lib/cloudSyncDeadline';
@@ -1796,6 +1803,10 @@ function MapPage({
           minZoom: 1,
           maxZoom: 18,
           style: MOBILE_MAPBOX_STYLE,
+          fallbackStyle: createRasterFallbackStyle(
+            deploymentConfig.mapTileUrl,
+            deploymentConfig.mapTileAttribution
+          ),
         });
         map.setBasemapTheme(basemapTheme);
         map.applyEditorialStyle();

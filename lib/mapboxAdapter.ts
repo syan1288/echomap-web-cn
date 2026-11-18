@@ -1,5 +1,43 @@
 type LatLngTuple = [number, number];
 type BoundsTuple = Array<LatLngTuple>;
+type RasterStyle = {
+  version: 8;
+  sources: Record<string, {
+    type: 'raster';
+    tiles: string[];
+    tileSize: number;
+    attribution?: string;
+  }>;
+  layers: Array<{
+    id: string;
+    type: 'raster';
+    source: string;
+    minzoom: number;
+    maxzoom: number;
+  }>;
+};
+
+export function createRasterFallbackStyle(tileUrl: string, attribution = ''): RasterStyle {
+  const normalizedTileUrl = tileUrl.replace(/\{s\}/g, '1').replace(/\{r\}/g, '');
+  return {
+    version: 8,
+    sources: {
+      'echo-fallback': {
+        type: 'raster',
+        tiles: [normalizedTileUrl],
+        tileSize: 256,
+        ...(attribution ? { attribution } : {}),
+      },
+    },
+    layers: [{
+      id: 'echo-fallback-raster-layer',
+      type: 'raster',
+      source: 'echo-fallback',
+      minzoom: 0,
+      maxzoom: 22,
+    }],
+  };
+}
 
 export type BasemapThemeId = 'paper' | 'mist' | 'grey' | 'clove';
 
@@ -143,6 +181,9 @@ export class MapboxAdapter {
   private defaultStyle: string;
   private currentStyle: string;
   private editorialStyleBound = false;
+  private fallbackStyle?: RasterStyle;
+  private fallbackStyleApplied = false;
+  private fallbackStyleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     mapboxgl: any,
@@ -153,9 +194,12 @@ export class MapboxAdapter {
       minZoom: number;
       maxZoom: number;
       style: string;
+      fallbackStyle?: RasterStyle;
+      fallbackStyleTimeoutMs?: number;
     }
   ) {
     this.defaultStyle = options.style;
+    this.fallbackStyle = options.fallbackStyle;
     this.currentStyle = this.resolveStyleForTheme(this.basemapTheme);
     this.map = new mapboxgl.Map({
       container,
@@ -188,14 +232,25 @@ export class MapboxAdapter {
         : {}),
     });
     this.enableInteractions();
+    if (this.fallbackStyle) {
+      this.map.on('error', this.handleInitialStyleError);
+      this.map.once('style.load', this.clearFallbackStyleTimer);
+      this.fallbackStyleTimer = setTimeout(
+        () => this.applyRasterFallback(),
+        options.fallbackStyleTimeoutMs ?? 5000
+      );
+    }
   }
 
   destroy() {
+    this.clearFallbackStyleTimer();
+    this.map?.off?.('error', this.handleInitialStyleError);
     this.map?.remove?.();
   }
 
   setBasemapTheme(themeId: BasemapThemeId) {
     this.basemapTheme = themeId;
+    if (this.fallbackStyleApplied) return;
     const nextStyle = this.resolveStyleForTheme(themeId);
     if (nextStyle !== this.currentStyle) {
       this.currentStyle = nextStyle;
@@ -207,6 +262,7 @@ export class MapboxAdapter {
   }
 
   applyEditorialStyle() {
+    if (this.fallbackStyleApplied) return;
     const apply = () => {
       if (!this.shouldApplyEditorialPaint()) return;
       const style = this.map.getStyle?.();
@@ -347,6 +403,26 @@ export class MapboxAdapter {
   private shouldApplyEditorialPaint() {
     return this.currentStyle === this.defaultStyle || /light-v11|standard/i.test(this.currentStyle);
   }
+
+  private handleInitialStyleError = (event?: any) => {
+    const message = String(event?.error?.message ?? event?.message ?? '');
+    if (/https?:\/\/api\.mapbox\.com\/styles\//i.test(message)) {
+      this.applyRasterFallback();
+    }
+  };
+
+  private applyRasterFallback() {
+    if (this.fallbackStyleApplied || !this.fallbackStyle) return;
+    this.fallbackStyleApplied = true;
+    this.clearFallbackStyleTimer();
+    this.map.setStyle(this.fallbackStyle);
+  }
+
+  private clearFallbackStyleTimer = () => {
+    if (this.fallbackStyleTimer === null) return;
+    clearTimeout(this.fallbackStyleTimer);
+    this.fallbackStyleTimer = null;
+  };
 
   on(event: string, handler: (evt?: any) => void) {
     const wrapped = this.wrapEvent(handler);
