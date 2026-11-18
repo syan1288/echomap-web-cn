@@ -39,6 +39,7 @@ import { deploymentConfig } from '../../lib/deploymentConfig';
 import { BASEMAP_THEME_OPTIONS, getPoiDotColor, getPoiDotSize, type BasemapThemeId, MapboxAdapter } from '../../lib/mapboxAdapter';
 import { loadMapbox, prewarmMapbox } from '../../lib/mapboxLoader';
 import { apiUrl } from '../../lib/apiBase';
+import { scheduleDeadline } from '../../lib/cloudSyncDeadline';
 import { buildPlaceSearchUrl, buildReverseGeocodeUrl } from '../../lib/deploymentConfig';
 import {
   fetchImageProviderAvailability,
@@ -213,6 +214,7 @@ const MOBILE_COPY = {
     loadingMap: 'Loading map...',
     mapboxLoadFailed: 'Mapbox failed to load',
     mapboxTokenMissing: 'Mapbox token missing',
+    cloudSyncSlow: 'Cloud sync is taking longer. Local data is available while it continues.',
     typeLocationFirst: 'Type a location first',
     noMatchingMemory: 'No matching memory',
     currentLocation: 'Current location',
@@ -300,6 +302,7 @@ const MOBILE_COPY = {
     loadingMap: '地图加载中...',
     mapboxLoadFailed: 'Mapbox 加载失败',
     mapboxTokenMissing: '缺少 Mapbox token',
+    cloudSyncSlow: '云端同步耗时较长，可先继续使用本地内容。',
     typeLocationFirst: '请先输入地点',
     noMatchingMemory: '没有匹配的回忆',
     currentLocation: '当前位置',
@@ -3453,6 +3456,7 @@ export function MobileShell() {
   const [mapShouldMount, setMapShouldMount] = useState(false);
   const [memories, setMemories] = useState<MobileMemory[]>(() => restoredMobileMemoriesWithSeeds());
   const [cloudStatus, setCloudStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
+  const [cloudSyncSlow, setCloudSyncSlow] = useState(false);
   const [showAddBuildingModal, setShowAddBuildingModal] = useState(false);
   const [pendingMapPlacement, setPendingMapPlacement] = useState<MobileMapPlacement | null>(null);
   const [mapPlacementNotice, setMapPlacementNotice] = useState<MapPlacementNotice | null>(null);
@@ -3771,28 +3775,46 @@ export function MobileShell() {
     if (!user) {
       cloudLoadedUserRef.current = null;
       setCloudStatus('idle');
+      setCloudSyncSlow(false);
       setMemories(restoredMobileMemoriesWithSeeds());
       return;
     }
     if (!isSupabaseConfigured) return;
     if (cloudLoadedUserRef.current === user.id) return;
+    let active = true;
     cloudLoadedUserRef.current = user.id;
     setCloudStatus('loading');
+    setCloudSyncSlow(false);
+    const cancelDeadline = scheduleDeadline(() => {
+      if (!active) return;
+      setCloudSyncSlow(true);
+      setCloudStatus('ready');
+    }, 15_000);
     void (async () => {
       try {
         const loaded = await loadAllCloudBuildings(() => nextCloudIdRef.current++);
+        if (!active) return;
         const nextMemories = loaded
           .map(mobileMemoryFromCloud)
           .filter((item): item is MobileMemory => Boolean(item));
         const realMemories = mergeMobileMemories(readStoredMobileMemories(), nextMemories);
         setMemories(realMemories.length ? realMemories : seedMemories);
+        setCloudSyncSlow(false);
         setCloudStatus('ready');
       } catch (error) {
+        if (!active) return;
         console.error('mobile cloud load failed', error);
         setMemories(restoredMobileMemoriesWithSeeds());
+        setCloudSyncSlow(false);
         setCloudStatus('ready');
+      } finally {
+        cancelDeadline();
       }
     })();
+    return () => {
+      active = false;
+      cancelDeadline();
+    };
   }, [user]);
 
   const deleteMobileMemory = useCallback((memoryToDelete: MobileMemory) => {
@@ -3940,6 +3962,15 @@ export function MobileShell() {
           style={{ color: BRAND_BLUE, fontFamily: MONO_FONT }}
         >
           Syncing cloud...
+        </div>
+      )}
+      {cloudSyncSlow && (
+        <div
+          role="status"
+          className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-center text-[12px] shadow-sm"
+          style={{ color: BRAND_BLUE, fontFamily: MONO_FONT }}
+        >
+          {MOBILE_COPY[language].cloudSyncSlow}
         </div>
       )}
       {activeTab !== 'setting' && <BottomNav activeTab={activeTab} onChange={setActiveTab} />}
