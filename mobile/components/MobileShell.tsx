@@ -3449,6 +3449,7 @@ function SettingPage({
 
 export function MobileShell() {
   const { loading, user } = useAuth();
+  const userId = user?.id;
   const { language } = useLocalization();
   const [activeTab, setActiveTab] = useState<MobileTab>('home');
   const [mountedTabs, setMountedTabs] = useState<Set<MobileTab>>(() => new Set<MobileTab>(['home', 'gallery', 'setting']));
@@ -3772,7 +3773,7 @@ export function MobileShell() {
   }, [isAuthenticated, loading, user]);
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       cloudLoadedUserRef.current = null;
       setCloudStatus('idle');
       setCloudSyncSlow(false);
@@ -3780,9 +3781,9 @@ export function MobileShell() {
       return;
     }
     if (!isSupabaseConfigured) return;
-    if (cloudLoadedUserRef.current === user.id) return;
+    if (cloudLoadedUserRef.current === userId) return;
     let active = true;
-    cloudLoadedUserRef.current = user.id;
+    cloudLoadedUserRef.current = userId;
     setCloudStatus('loading');
     setCloudSyncSlow(false);
     const cancelDeadline = scheduleDeadline(() => {
@@ -3815,7 +3816,7 @@ export function MobileShell() {
       active = false;
       cancelDeadline();
     };
-  }, [user]);
+  }, [userId]);
 
   const deleteMobileMemory = useCallback((memoryToDelete: MobileMemory) => {
     rememberDeletedMobileMemory(memoryToDelete);
