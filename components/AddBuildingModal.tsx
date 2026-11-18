@@ -1,11 +1,11 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useLocalization } from '../context/LocalizationContext';
-import { assertFileSizeOk } from '../constants/uploadLimits';
+import { assertFileSizeOk } from '../shared/domain/uploads/uploadLimits';
 import {
   BUILDING_STYLE_OPTIONS,
   DEFAULT_BUILDING_STYLE,
   type BuildingStyleId,
-} from '../prompts/buildingStyle';
+} from '../shared/domain/building-style/buildingStyle';
 import { isNativeApp, pickImageAsFile } from '../lib/mobile';
 
 const STYLE_I18N_KEY: Record<BuildingStyleId, string> = {
@@ -16,6 +16,8 @@ const STYLE_I18N_KEY: Record<BuildingStyleId, string> = {
 };
 
 const ICON_STROKE = 1.5;
+const BACK_BUTTON_CLASS =
+  'echo-add-building-back-button self-start bg-transparent border-0 cursor-pointer p-0';
 
 type ModalStep = 'method' | 'review';
 
@@ -35,6 +37,7 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
   const [sizeError, setSizeError] = useState<string | null>(null);
   const localInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const canSave = Boolean(file && buildingName.trim());
 
   const reset = useCallback(() => {
     setStep('method');
@@ -109,7 +112,7 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
 
       {step === 'method' ? (
         <div
-          className="bg-white w-full max-w-[880px] border border-black shadow-xl flex flex-col rounded-none overflow-hidden"
+          className="echo-add-building-modal echo-add-building-modal-method bg-white w-full max-w-[880px] border border-black shadow-xl flex flex-col rounded-none overflow-hidden"
           onMouseDown={(e) => e.stopPropagation()}
           style={{
             fontFamily: '"Roboto Mono", ui-monospace, monospace',
@@ -120,10 +123,10 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
           <div className="px-6 md:px-12 pt-6 pb-5 flex flex-col gap-4">
             <button
               type="button"
-              className="self-start text-[18px] text-[#5a5a5a] bg-transparent border-0 cursor-pointer"
+              className={BACK_BUTTON_CLASS}
               onClick={handleClose}
             >
-              &lt; Back to map
+              &lt; {t('backToMap')}
             </button>
 
             {sizeError && <p className="m-0 text-[13px] text-red-600">{sizeError}</p>}
@@ -164,7 +167,7 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
             <div className="relative border border-dashed border-black/50 bg-[#fafafa] min-h-[330px] rounded-none overflow-hidden">
               <button
                 type="button"
-                className="w-full h-full min-h-[330px] border-0 bg-transparent cursor-pointer flex items-center justify-center p-5"
+                className="relative w-full h-full min-h-[330px] overflow-hidden border-0 bg-transparent cursor-pointer flex items-center justify-center p-5"
                 onClick={() => {
                   if (isNativeApp()) {
                     void pickNativeFile('camera');
@@ -175,7 +178,7 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
                 aria-label="Instant photo"
               >
                 {previewUrl ? (
-                  <img src={previewUrl} alt="" className="max-h-[300px] w-auto object-contain" />
+                  <img src={previewUrl} alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
                 ) : (
                   <div className="flex flex-col items-center gap-4 text-[#5a5a5a]">
                     <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -190,7 +193,7 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
 
             <div>
               <label className="block text-[18px] text-[#4f4f4f] mb-2" htmlFor="m01-building-name">
-                Building name
+                {t('buildingNameLabel')}
               </label>
               <input
                 id="m01-building-name"
@@ -205,7 +208,7 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
 
             <div>
               <label className="block text-[18px] text-[#4f4f4f] mb-2" htmlFor="m01-building-style">
-                Building style
+                {t('buildingStyleLabel')}
               </label>
               <div className="relative">
                 <select
@@ -223,11 +226,9 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
                   ))}
                 </select>
                 <span
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#756F6C] text-xs"
+                  className="pointer-events-none absolute right-3 top-1/2 h-0 w-0 -translate-y-1/2 border-l-[6px] border-r-[6px] border-t-[10px] border-l-transparent border-r-transparent border-t-[#332115]"
                   aria-hidden
-                >
-                  ▼
-                </span>
+                />
               </div>
             </div>
           </div>
@@ -237,21 +238,21 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
               type="button"
               className="px-5 py-2 border border-black bg-white text-black text-sm hover:bg-neutral-100 rounded-none disabled:opacity-40"
               style={{ borderWidth: 1.5 }}
-              disabled={!file}
+              disabled={!canSave}
               onClick={() => {
-                if (!file) return;
+                if (!file || !buildingName.trim()) return;
                 onSave(file, buildingName.trim(), buildingStyle);
                 reset();
                 onClose();
               }}
             >
-              Save
+              {t('save')}
             </button>
           </div>
         </div>
       ) : (
         <div
-          className="bg-white w-full max-w-[640px] border border-black shadow-xl rounded-none overflow-hidden"
+          className="echo-add-building-modal echo-add-building-modal-review bg-white w-full max-w-[640px] border border-black shadow-xl rounded-none overflow-hidden"
           onMouseDown={(e) => e.stopPropagation()}
           style={{
             fontFamily: '"Roboto Mono", ui-monospace, monospace',
@@ -262,7 +263,7 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
           <div className="p-4">
             <button
               type="button"
-              className="text-[18px] text-[#5a5a5a] bg-transparent border-0 cursor-pointer"
+              className={BACK_BUTTON_CLASS}
               onClick={() => setStep('method')}
             >
               &lt; Back to building method

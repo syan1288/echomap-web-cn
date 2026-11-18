@@ -164,6 +164,36 @@ OPENAI_IMAGE_RESOLUTION=1k
 JIMENG_ACCESS_KEY_ID=your_jimeng_access_key_id
 JIMENG_SECRET_ACCESS_KEY=your_jimeng_secret_access_key
 GEMINI_API_KEY=your_gemini_key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+# 仅当 quota 持久化切到 Supabase 表时填写，必须只放服务端
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+ECHO_GENERATION_QUOTA_ENABLED=true
+ECHO_FREE_STARTER_GENERATIONS=8
+ECHO_FREE_MONTHLY_GENERATIONS=2
+# 验证期先用 file；多实例/正式生产切 supabase
+ECHO_ENTITLEMENTS_STORE=file
+ECHO_ENTITLEMENTS_STORE_PATH=/home/ubuntu/apps/echomap-web-cn/logs/entitlements.json
+ECHO_ENTITLEMENTS_TABLE=echo_entitlements
+ECHO_PAYMENT_ORDERS_PATH=/home/ubuntu/apps/echomap-web-cn/logs/payment-orders.json
+ECHO_PAYMENT_PROVIDER=manual
+ECHO_PLUS_PAYMENT_URL=https://your-payment-page.example.com/plus
+ECHO_PRO_PAYMENT_URL=https://your-payment-page.example.com/pro
+ECHO_PLUS_PAYMENT_AMOUNT_CNY=5
+ECHO_PRO_PAYMENT_AMOUNT_CNY=12.9
+ECHO_PLUS_PAYMENT_CREDITS=20
+ECHO_PRO_PAYMENT_CREDITS=60
+
+# 官方微信支付 Native 自动开通时再切换：
+# ECHO_PAYMENT_PROVIDER=wechat_native
+# WECHAT_PAY_APPID=wx...
+# WECHAT_PAY_MCHID=...
+# WECHAT_PAY_MERCHANT_SERIAL_NO=...
+# WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH=/home/ubuntu/apps/echomap-web-cn/secrets/wechatpay-apiclient-key.pem
+# WECHAT_PAY_NOTIFY_URL=https://echomap.syan12.cn/api/payments/wechat/notify
+# WECHAT_PAY_API_V3_KEY=32字节APIv3密钥
+# WECHAT_PAY_PLATFORM_SERIAL_NO=微信支付平台公钥/证书序列号
+# WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH=/home/ubuntu/apps/echomap-web-cn/secrets/wechatpay-platform-public-key.pem
 
 VITE_APP_VARIANT=cn
 VITE_AMAP_WEB_KEY=your_amap_key
@@ -189,6 +219,10 @@ VITE_MAPBOX_STYLE=mapbox://styles/mapbox/standard
 - 若你用 APIMart 这类 OpenAI 兼容网关，额外填写 `OPENAI_BASE_URL=https://api.apimart.ai/v1`。
 - 若 `OPENAI_BASE_URL=https://api.apimart.ai/v1`，后端会自动把同一个 `ChatGPT 图像 2.0` 入口切到 APIMart 的 `gpt-image-2` 异步任务流，默认固定 `size=1:1`、`resolution=1k`、`n=1`，图生图继续传 `image_urls`，并保留现有建筑风格 prompt。
 - 若前端和 API 分离部署，记得把这些 AI 环境变量配在独立 API 服务上，而不是只配在静态前端机器上。
+- Free 版本额度拦截在 `/api/generate` 服务端生效。前端会随生成请求发送 Supabase access token；服务端验证后按 `ECHO_FREE_STARTER_GENERATIONS` 和 `ECHO_FREE_MONTHLY_GENERATIONS` 扣减额度。
+- 当前默认额度存储是单机文件型，适合腾讯云 Lighthouse 验证期。`logs/entitlements.json` 不需要提前手动创建；第一次登录用户成功生成并扣额度后，服务端会按 `ECHO_ENTITLEMENTS_STORE_PATH` 自动创建/写入这个文件。正式扩容、多实例或自动支付开通前，设置 `ECHO_ENTITLEMENTS_STORE=supabase` 并使用 Supabase 表持久化；推荐表结构见 `docs/quota-persistence.md`。
+- `ECHO_PAYMENT_PROVIDER=manual` 时，支付只创建待人工确认订单：`/api/payments/create-order` 写入 `ECHO_PAYMENT_ORDERS_PATH`，用户付款后用 `npm run grant:credits -- <userId> <credits>` 人工加额度。
+- `ECHO_PAYMENT_PROVIDER=wechat_native` 时，`/api/payments/create-order` 会向微信支付 Native 下单，微信支付成功后回调 `/api/payments/wechat/notify`；服务端验签、解密、核对金额后自动调用额度授信。配置步骤见 `docs/payment-automation-wechat.md`。
 
 ## 当前高德版行为
 

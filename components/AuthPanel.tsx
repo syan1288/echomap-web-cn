@@ -18,6 +18,7 @@ function GlassInput({
   placeholder,
   leftIcon,
   onSubmit,
+  showSubmit = false,
 }: {
   type: 'email' | 'password';
   value: string;
@@ -25,6 +26,7 @@ function GlassInput({
   placeholder: string;
   leftIcon: React.ReactNode;
   onSubmit: () => void;
+  showSubmit?: boolean;
 }) {
   return (
     <div
@@ -44,7 +46,7 @@ function GlassInput({
           if (e.key === 'Enter') onSubmit();
         }}
       />
-      {type === 'password' && (
+      {showSubmit && (
         <button
           type="button"
           onClick={onSubmit}
@@ -82,7 +84,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
     try {
       const fn = mode === 'signIn' ? signInWithEmail : signUpWithEmail;
       const r = await fn(email, password);
-      if (!r.ok) {
+      if (r.ok === false) {
         setHint(r.message);
         return;
       }
@@ -162,6 +164,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
             onChange={setPassword}
             placeholder={t('authPasswordPlaceholder')}
             onSubmit={submit}
+            showSubmit
             leftIcon={
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="10" cy="11" r="4" />

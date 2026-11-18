@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { ProcessedImage } from '../App';
+import type { ProcessedImage } from '../web/app/webMemoryTypes';
 import type { BasemapThemeId } from '../lib/mapboxAdapter';
 import { getBasemapTheme } from '../lib/mapboxAdapter';
 

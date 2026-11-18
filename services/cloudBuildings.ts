@@ -1,7 +1,8 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
-import type { AudioEntry, ProcessedImage, PhotoData, LogData } from '../types/memory';
-import { normalizeLog } from '../utils/normalizeLog';
-import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from '../prompts/buildingStyle';
+import { apiUrl } from '../lib/apiBase';
+import type { AudioEntry, ProcessedImage, PhotoData, LogData } from '../web/app/webMemoryTypes';
+import { normalizeLog } from '../shared/domain/memory/normalizeLog';
+import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from '../shared/domain/building-style/buildingStyle';
 
 export { isSupabaseConfigured };
 
@@ -33,6 +34,87 @@ type StoredAudioEntry = {
 };
 
 const BUCKET = 'buildings';
+
+type UsageDelta = {
+  landmarkCountDelta: number;
+  photoCountDelta: number;
+  storageBytesDelta: number;
+};
+
+const EMPTY_USAGE: UsageDelta = {
+  landmarkCountDelta: 0,
+  photoCountDelta: 0,
+  storageBytesDelta: 0,
+};
+
+function hasPositiveUsage(delta: UsageDelta): boolean {
+  return delta.landmarkCountDelta > 0 || delta.photoCountDelta > 0 || delta.storageBytesDelta > 0;
+}
+
+function positiveUsageDiff(next: UsageDelta, previous: UsageDelta): UsageDelta {
+  return {
+    landmarkCountDelta: Math.max(0, next.landmarkCountDelta - previous.landmarkCountDelta),
+    photoCountDelta: Math.max(0, next.photoCountDelta - previous.photoCountDelta),
+    storageBytesDelta: Math.max(0, next.storageBytesDelta - previous.storageBytesDelta),
+  };
+}
+
+function numberFromLog(log: Record<string, unknown> | null | undefined, key: string): number | null {
+  const value = log?.[key];
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : null;
+}
+
+function usageFromRow(row: Pick<BuildingRow, 'photos' | 'log'> | null | undefined): UsageDelta {
+  if (!row) return EMPTY_USAGE;
+  const log = row.log as Record<string, unknown> | undefined;
+  const photoCount = numberFromLog(log, 'usage_photo_count') ?? row.photos?.length ?? 0;
+  return {
+    landmarkCountDelta: numberFromLog(log, 'usage_landmark_count') ?? 1,
+    photoCountDelta: photoCount,
+    storageBytesDelta: numberFromLog(log, 'usage_storage_bytes') ?? 0,
+  };
+}
+
+async function loadStoredUsage(cloudId: string | undefined, userId: string): Promise<UsageDelta> {
+  if (!supabase || !cloudId) return EMPTY_USAGE;
+  const { data, error } = await supabase
+    .from('buildings')
+    .select('photos, log')
+    .eq('id', cloudId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error || !data) return EMPTY_USAGE;
+  return usageFromRow(data as Pick<BuildingRow, 'photos' | 'log'>);
+}
+
+function currentUsageForImage(img: ProcessedImage, processedBlob: Blob): UsageDelta {
+  const photoBytes = img.photos.reduce((sum, photo) => sum + Math.max(0, photo.file.size || 0), 0);
+  const audioBytes = img.audioEntries.reduce((sum, entry) => sum + Math.max(0, entry.file?.size || 0), 0);
+  return {
+    landmarkCountDelta: 1,
+    photoCountDelta: img.photos.length,
+    storageBytesDelta: processedBlob.size + photoBytes + audioBytes,
+  };
+}
+
+async function postUsageQuota(action: 'consume' | 'release', delta: UsageDelta): Promise<void> {
+  if (!hasPositiveUsage(delta)) return;
+  const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
+  const response = await fetch(apiUrl('/api/usage-quota'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action, ...delta }),
+  });
+  const body = (await response.json().catch(() => ({}))) as { error?: string; exhausted?: Array<{ kind?: string }> };
+  if (!response.ok) {
+    const exhausted = body.exhausted?.map((item) => item.kind).filter(Boolean).join(', ');
+    throw new Error(body.error || (exhausted ? `Usage quota exhausted: ${exhausted}` : `Usage quota failed (${response.status})`));
+  }
+}
 
 /**
  * 从 Blob 得到可展示的 HTMLImageElement。
@@ -211,84 +293,121 @@ export async function saveBuildingToCloud(img: ProcessedImage, userId: string): 
 
   const procPath = `${base}/processed.png`;
   const procBlob = await imageElementToPngBlob(img.processedImage);
-  const { error: upProc } = await supabase.storage.from(BUCKET).upload(procPath, procBlob, {
-    upsert: true,
-    contentType: 'image/png',
-  });
-  if (upProc) throw upProc;
+  const previousUsage = await loadStoredUsage(img.cloudId, userId);
+  const nextUsage = currentUsageForImage(img, procBlob);
+  const consumeDelta = positiveUsageDiff(nextUsage, previousUsage);
+  const releaseDelta = positiveUsageDiff(previousUsage, nextUsage);
+  await postUsageQuota('consume', consumeDelta);
 
-  const photoMeta: Array<{ path: string; name?: string; photo_id?: string; createdAt?: string }> = [];
-  for (let i = 0; i < img.photos.length; i++) {
-    const p = img.photos[i];
-    const ext = (p.file.name.split('.').pop() || 'jpg').slice(0, 8);
-    const path = `${base}/photo_${i}.${ext}`;
-    const { error: upPh } = await supabase.storage.from(BUCKET).upload(path, p.file, { upsert: true, contentType: p.file.type || 'image/jpeg' });
-    if (upPh) throw upPh;
-    photoMeta.push({ path, name: p.file.name, photo_id: p.photo_id, createdAt: p.createdAt });
-  }
+  let saved = false;
+  try {
+    const { error: upProc } = await supabase.storage.from(BUCKET).upload(procPath, procBlob, {
+      upsert: true,
+      contentType: 'image/png',
+    });
+    if (upProc) throw upProc;
 
-  const audioMeta: StoredAudioEntry[] = [];
-  for (let i = 0; i < img.audioEntries.length; i++) {
-    const entry = img.audioEntries[i];
-    if (entry.source === 'builtin') {
+    const photoMeta: Array<{ path: string; name?: string; photo_id?: string; createdAt?: string }> = [];
+    for (let i = 0; i < img.photos.length; i++) {
+      const p = img.photos[i];
+      const ext = (p.file.name.split('.').pop() || 'jpg').slice(0, 8);
+      const path = `${base}/photo_${i}.${ext}`;
+      const { error: upPh } = await supabase.storage.from(BUCKET).upload(path, p.file, {
+        upsert: true,
+        contentType: p.file.type || 'image/jpeg',
+      });
+      if (upPh) throw upPh;
+      photoMeta.push({ path, name: p.file.name, photo_id: p.photo_id, createdAt: p.createdAt });
+    }
+
+    const audioMeta: StoredAudioEntry[] = [];
+    for (let i = 0; i < img.audioEntries.length; i++) {
+      const entry = img.audioEntries[i];
+      if (entry.source === 'builtin') {
+        audioMeta.push({
+          id: entry.id,
+          kind: entry.kind,
+          title: entry.title,
+          createdAt: entry.createdAt,
+          source: entry.source,
+          url: entry.url,
+        });
+        continue;
+      }
+      if (!entry.file) continue;
+      const ext = (entry.file.name.split('.').pop() || 'webm').slice(0, 8);
+      const path = `${base}/audio_${i}.${ext}`;
+      const { error: upAudio } = await supabase.storage.from(BUCKET).upload(path, entry.file, {
+        upsert: true,
+        contentType: entry.file.type || 'audio/webm',
+      });
+      if (upAudio) throw upAudio;
       audioMeta.push({
         id: entry.id,
         kind: entry.kind,
         title: entry.title,
         createdAt: entry.createdAt,
         source: entry.source,
-        url: entry.url,
+        path,
+        name: entry.file.name,
       });
-      continue;
     }
-    if (!entry.file) continue;
-    const ext = (entry.file.name.split('.').pop() || 'webm').slice(0, 8);
-    const path = `${base}/audio_${i}.${ext}`;
-    const { error: upAudio } = await supabase.storage.from(BUCKET).upload(path, entry.file, {
-      upsert: true,
-      contentType: entry.file.type || 'audio/webm',
-    });
-    if (upAudio) throw upAudio;
-    audioMeta.push({
-      id: entry.id,
-      kind: entry.kind,
-      title: entry.title,
-      createdAt: entry.createdAt,
-      source: entry.source,
-      path,
-      name: entry.file.name,
-    });
+
+    const row = {
+      id: cloudId,
+      user_id: userId,
+      lat: img.lat,
+      lng: img.lng,
+      width: img.width,
+      height: img.height,
+      flipped_horizontally: Boolean(img.flippedHorizontally),
+      is_locked: Boolean(img.isLocked),
+      building_style: img.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+      content_bounds: img.contentBounds,
+      log: {
+        ...img.log,
+        landmark_id: img.id,
+        audio_entries: audioMeta,
+        usage_landmark_count: nextUsage.landmarkCountDelta,
+        usage_photo_count: nextUsage.photoCountDelta,
+        usage_storage_bytes: nextUsage.storageBytesDelta,
+      } as unknown as Record<string, unknown>,
+      processed_image_path: procPath,
+      photos: photoMeta,
+    };
+
+    const { error: dbErr } = await supabase.from('buildings').upsert(row, { onConflict: 'id' });
+    if (dbErr) throw dbErr;
+    saved = true;
+  } finally {
+    if (!saved && hasPositiveUsage(consumeDelta)) {
+      await postUsageQuota('release', consumeDelta).catch((error) => {
+        console.warn('[cloud] usage quota rollback failed', error);
+      });
+    }
   }
 
-  const row = {
-    id: cloudId,
-    user_id: userId,
-    lat: img.lat,
-    lng: img.lng,
-    width: img.width,
-    height: img.height,
-    flipped_horizontally: Boolean(img.flippedHorizontally),
-    is_locked: Boolean(img.isLocked),
-    building_style: img.buildingStyle ?? DEFAULT_BUILDING_STYLE,
-    content_bounds: img.contentBounds,
-    log: { ...img.log, landmark_id: img.id, audio_entries: audioMeta } as unknown as Record<string, unknown>,
-    processed_image_path: procPath,
-    photos: photoMeta,
-  };
-
-  const { error: dbErr } = await supabase.from('buildings').upsert(row, { onConflict: 'id' });
-  if (dbErr) throw dbErr;
+  if (hasPositiveUsage(releaseDelta)) {
+    await postUsageQuota('release', releaseDelta).catch((error) => {
+      console.warn('[cloud] usage quota release failed', error);
+    });
+  }
 
   return cloudId;
 }
 
 export async function deleteBuildingFromCloud(cloudId: string, userId: string): Promise<void> {
   if (!supabase) return;
+  const usage = await loadStoredUsage(cloudId, userId);
   const prefix = `${userId}/${cloudId}`;
   const { data: list } = await supabase.storage.from(BUCKET).list(prefix);
   if (list?.length) {
     const paths = list.map((o) => `${prefix}/${o.name}`);
     await supabase.storage.from(BUCKET).remove(paths);
   }
-  await supabase.from('buildings').delete().eq('id', cloudId).eq('user_id', userId);
+  const { error } = await supabase.from('buildings').delete().eq('id', cloudId).eq('user_id', userId);
+  if (error) throw error;
+  await postUsageQuota('release', usage).catch((releaseError) => {
+    console.warn('[cloud] usage quota release failed', releaseError);
+  });
 }

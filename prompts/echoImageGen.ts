@@ -26,9 +26,11 @@ function buildUserStyleReminder(style: BuildingStyleId): string {
 
 export function buildInitialUserPrompt(buildingName?: string, style: BuildingStyleId = DEFAULT_BUILDING_STYLE): string {
   const trimmed = buildingName?.trim();
+  const extractionInstruction =
+    '请把输入照片中的主体建筑提取为独立建筑资产；输入照片只用于识别建筑外形和细节，输出画面不能包含原照片背景、人物、天空、地面、游客、车辆、招牌或场景拼贴。';
   return trimmed
-    ? `建筑名称参考：${trimmed}。请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`
-    : `请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`;
+    ? `建筑名称参考：${trimmed}。${extractionInstruction} 请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`
+    : `${extractionInstruction} 请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`;
 }
 
 /** 编辑 / 重生成：用户已有一句自然语言修改指令 */
@@ -39,5 +41,5 @@ export function buildEditUserPrompt(
 ): string {
   const base = editInstruction.trim();
   const extra = buildingName?.trim() ? ` 建筑名称参考：${buildingName.trim()}。` : '';
-  return `${base}${extra} 请保留原建筑的可识别地标特征，只在现有结构上调整。风格要求：${buildUserStyleReminder(style)}`.trim();
+  return `${base}${extra} 输入照片只作为建筑结构参考，输出不能包含原照片背景、人物、天空、地面、游客、车辆、招牌或场景拼贴。请保留原建筑的可识别地标特征，只在现有结构上调整。风格要求：${buildUserStyleReminder(style)}`.trim();
 }

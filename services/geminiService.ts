@@ -1,6 +1,7 @@
-import { assertFileSizeOk, MAX_UPLOAD_BYTES } from '../constants/uploadLimits';
+import { assertFileSizeOk, MAX_UPLOAD_BYTES } from '../shared/domain/uploads/uploadLimits';
 import { apiUrl } from '../lib/apiBase';
-import type { BuildingStyleId } from '../prompts/buildingStyle';
+import { supabase } from '../lib/supabaseClient';
+import type { BuildingStyleId } from '../shared/domain/building-style/buildingStyle';
 import { uploadImageAndCreateJimengUrl } from './jimengInputUpload';
 export type PreferredImageModel = 'gemini' | 'jimeng' | 'chatgpt-image';
 
@@ -37,22 +38,55 @@ export interface GenerateImageOptions {
   preferredModel?: PreferredImageModel;
 }
 
+export const checkGenerationQuota = async (): Promise<void> => {
+  const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
+
+  const res = await fetch(apiUrl('/api/generation-quota'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action: 'check' }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    code?: string;
+  };
+
+  if (!res.ok) {
+    if (res.status === 401 || data.code === 'AUTH_REQUIRED') {
+      throw new Error('请先登录后再生成 3D 建筑。');
+    }
+    if (res.status === 402 || data.code === 'GENERATION_QUOTA_EXHAUSTED') {
+      throw new Error('免费额度已用完，请购买额度解锁。');
+    }
+    throw new Error(data.error || `Quota check failed (${res.status})`);
+  }
+};
+
 /** POST /api/generate：开发时由 Vite 插件转发 Vertex；生产需部署等价接口 */
 export const generateImageWithPrompt = async (
   imageFile: File,
   options: GenerateImageOptions = {}
 ): Promise<{ imageUrl: string | null; text: string | null }> => {
   const sizeCheck = assertFileSizeOk(imageFile);
-  if (!sizeCheck.ok) {
+  if (sizeCheck.ok === false) {
     throw new Error(sizeCheck.message);
   }
 
   const imageBase64 = await fileToBase64(imageFile);
   const jimengImageUrls =
     options.preferredModel === 'jimeng' ? [await uploadImageAndCreateJimengUrl(imageFile)] : undefined;
+  const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
   const res = await fetch(generateEndpoint(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       imageBase64,
       imageUrls: jimengImageUrls,
@@ -70,9 +104,16 @@ export const generateImageWithPrompt = async (
     model?: string;
     requestedModel?: PreferredImageModel;
     backend?: string;
+    code?: string;
   };
 
   if (!res.ok) {
+    if (res.status === 401 || data.code === 'AUTH_REQUIRED') {
+      throw new Error('请先登录后再生成 3D 建筑。');
+    }
+    if (res.status === 402 || data.code === 'GENERATION_QUOTA_EXHAUSTED' || data.code === 'API_CALL_QUOTA_EXHAUSTED') {
+      throw new Error('免费额度已用完，请购买额度解锁。');
+    }
     if (res.status === 404) {
       throw new Error(
         data.error ||

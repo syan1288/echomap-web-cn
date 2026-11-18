@@ -1,10 +1,10 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ProcessedImage } from '../App';
+import type { ProcessedImage } from '../web/app/webMemoryTypes';
 import {
   aggregateUploadsByDay,
   buildYearHeatmapCells,
   weekColumnForMonthStart,
-} from '../utils/travelHeatmapData';
+} from '../shared/domain/gallery/travelHeatmapData';
 
 const GALLERY_ARCH_BG = '#F9F1E2';
 const FONT_GOOGLE_SANS = '"Roboto", "Google Sans", system-ui, sans-serif';

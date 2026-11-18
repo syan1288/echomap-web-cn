@@ -28,3 +28,10 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Local mobile toolchains (large files, machine-specific)
+tools/android-sdk/
+tools/jdk17/
+tools/jdk21/
+tools/*.tar.gz
+tools/*.zip

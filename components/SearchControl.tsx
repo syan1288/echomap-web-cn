@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocalization } from '../context/LocalizationContext';
 import { buildPlaceSearchUrl } from '../lib/deploymentConfig';
-import { parseSearchSuggestions, type SearchSuggestion } from '../lib/locationAdapters';
+import { parseSearchSuggestions, type SearchSuggestion } from '../shared/domain/geo/locationParsers';
 
 const RECENT_KEY = 'echo_map_search_recent';
 const MAX_RECENT = 5;
@@ -113,8 +113,8 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
   return (
     <div
       data-map-ui="search-control"
-      className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-2"
-      style={{ width: 360, maxWidth: 'calc(100% - 16px)' }}
+      className="absolute left-1/2 -translate-x-1/2 z-[60] px-2"
+      style={{ width: 360, maxWidth: 'calc(100% - 16px)', top: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
       onBlur={() => setTimeout(() => setIsActive(false), 120)}
     >
       <div className="flex w-full" style={{ height: 44 }}>
@@ -125,7 +125,7 @@ export const SearchControl: React.FC<SearchControlProps> = ({ onLocationSelect }
           style={{ height: 44, width: 44, borderWidth: SEARCH_BORDER_PX, borderRightWidth: 0 }}
           aria-label={t('searchButton')}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>

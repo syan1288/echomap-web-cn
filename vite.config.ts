@@ -38,9 +38,72 @@ export default defineConfig(({ mode }) => {
     GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL ?? loaded.GEMINI_IMAGE_MODEL,
     ECHO_IMAGE_MODEL: process.env.ECHO_IMAGE_MODEL ?? loaded.ECHO_IMAGE_MODEL,
     ECHO_PREFER_API_KEY: process.env.ECHO_PREFER_API_KEY ?? loaded.ECHO_PREFER_API_KEY,
+    SUPABASE_URL: process.env.SUPABASE_URL ?? loaded.SUPABASE_URL,
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ?? loaded.SUPABASE_ANON_KEY,
+    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? loaded.VITE_SUPABASE_URL,
+    VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? loaded.VITE_SUPABASE_ANON_KEY,
+    ECHO_GENERATION_QUOTA_ENABLED:
+      process.env.ECHO_GENERATION_QUOTA_ENABLED ?? loaded.ECHO_GENERATION_QUOTA_ENABLED,
+    ECHO_ENTITLEMENTS_STORE_PATH:
+      process.env.ECHO_ENTITLEMENTS_STORE_PATH ?? loaded.ECHO_ENTITLEMENTS_STORE_PATH,
+    ECHO_FREE_STARTER_GENERATIONS:
+      process.env.ECHO_FREE_STARTER_GENERATIONS ?? loaded.ECHO_FREE_STARTER_GENERATIONS,
+    ECHO_FREE_MONTHLY_GENERATIONS:
+      process.env.ECHO_FREE_MONTHLY_GENERATIONS ?? loaded.ECHO_FREE_MONTHLY_GENERATIONS,
+    ECHO_PLUS_MONTHLY_GENERATIONS:
+      process.env.ECHO_PLUS_MONTHLY_GENERATIONS ?? loaded.ECHO_PLUS_MONTHLY_GENERATIONS,
+    ECHO_PRO_MONTHLY_GENERATIONS:
+      process.env.ECHO_PRO_MONTHLY_GENERATIONS ?? loaded.ECHO_PRO_MONTHLY_GENERATIONS,
+    ECHO_INITIAL_EXTRA_CREDITS:
+      process.env.ECHO_INITIAL_EXTRA_CREDITS ?? loaded.ECHO_INITIAL_EXTRA_CREDITS,
+    ECHO_PAYMENT_PROVIDER: process.env.ECHO_PAYMENT_PROVIDER ?? loaded.ECHO_PAYMENT_PROVIDER,
+    ECHO_PAYMENT_ORDERS_PATH: process.env.ECHO_PAYMENT_ORDERS_PATH ?? loaded.ECHO_PAYMENT_ORDERS_PATH,
+    ECHO_PLUS_PAYMENT_URL: process.env.ECHO_PLUS_PAYMENT_URL ?? loaded.ECHO_PLUS_PAYMENT_URL,
+    ECHO_PRO_PAYMENT_URL: process.env.ECHO_PRO_PAYMENT_URL ?? loaded.ECHO_PRO_PAYMENT_URL,
+    ECHO_PLUS_PAYMENT_AMOUNT_CNY:
+      process.env.ECHO_PLUS_PAYMENT_AMOUNT_CNY ?? loaded.ECHO_PLUS_PAYMENT_AMOUNT_CNY,
+    ECHO_PRO_PAYMENT_AMOUNT_CNY:
+      process.env.ECHO_PRO_PAYMENT_AMOUNT_CNY ?? loaded.ECHO_PRO_PAYMENT_AMOUNT_CNY,
+    ECHO_PLUS_PAYMENT_CREDITS: process.env.ECHO_PLUS_PAYMENT_CREDITS ?? loaded.ECHO_PLUS_PAYMENT_CREDITS,
+    ECHO_PRO_PAYMENT_CREDITS: process.env.ECHO_PRO_PAYMENT_CREDITS ?? loaded.ECHO_PRO_PAYMENT_CREDITS,
+    ECHO_PLUS_PAYMENT_INSTRUCTIONS:
+      process.env.ECHO_PLUS_PAYMENT_INSTRUCTIONS ?? loaded.ECHO_PLUS_PAYMENT_INSTRUCTIONS,
+    ECHO_PRO_PAYMENT_INSTRUCTIONS:
+      process.env.ECHO_PRO_PAYMENT_INSTRUCTIONS ?? loaded.ECHO_PRO_PAYMENT_INSTRUCTIONS,
+    WECHAT_PAY_APPID: process.env.WECHAT_PAY_APPID ?? loaded.WECHAT_PAY_APPID,
+    WECHAT_PAY_MCHID: process.env.WECHAT_PAY_MCHID ?? loaded.WECHAT_PAY_MCHID,
+    WECHAT_PAY_MERCHANT_SERIAL_NO:
+      process.env.WECHAT_PAY_MERCHANT_SERIAL_NO ?? loaded.WECHAT_PAY_MERCHANT_SERIAL_NO,
+    WECHAT_PAY_MERCHANT_PRIVATE_KEY:
+      process.env.WECHAT_PAY_MERCHANT_PRIVATE_KEY ?? loaded.WECHAT_PAY_MERCHANT_PRIVATE_KEY,
+    WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH:
+      process.env.WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH ?? loaded.WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH,
+    WECHAT_PAY_NOTIFY_URL: process.env.WECHAT_PAY_NOTIFY_URL ?? loaded.WECHAT_PAY_NOTIFY_URL,
+    WECHAT_PAY_API_V3_KEY: process.env.WECHAT_PAY_API_V3_KEY ?? loaded.WECHAT_PAY_API_V3_KEY,
+    WECHAT_PAY_PLATFORM_PUBLIC_KEY:
+      process.env.WECHAT_PAY_PLATFORM_PUBLIC_KEY ?? loaded.WECHAT_PAY_PLATFORM_PUBLIC_KEY,
+    WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH:
+      process.env.WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH ?? loaded.WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH,
+    WECHAT_PAY_PLATFORM_SERIAL_NO:
+      process.env.WECHAT_PAY_PLATFORM_SERIAL_NO ?? loaded.WECHAT_PAY_PLATFORM_SERIAL_NO,
   };
   return {
     plugins: [echoApiPlugin(env)],
+    build: {
+      chunkSizeWarningLimit: 1800,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('/@supabase/')) return 'vendor-supabase';
+            if (id.includes('/mapbox-gl/')) return 'vendor-mapbox';
+            if (id.includes('/tone/')) return 'vendor-audio';
+            if (id.includes('/@google/genai/')) return 'vendor-ai';
+            return 'vendor';
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

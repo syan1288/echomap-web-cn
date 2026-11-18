@@ -18,8 +18,8 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function errMessage(err: AuthError | null): string {
   if (!err) return 'Unknown error';
-  if (err.message === 'Invalid login credentials') return '邮箱或密码不正确';
-  if (err.message.includes('Email not confirmed')) return '请先点击邮件中的确认链接';
+  if (err.message === 'Invalid login credentials') return 'Email or password is incorrect';
+  if (err.message.includes('Email not confirmed')) return 'Please confirm your email before signing in';
   return err.message;
 }
 
@@ -53,19 +53,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const signInWithEmail = useCallback(async (email: string, password: string): Promise<AuthResult> => {
-    if (!supabase) return { ok: false, message: '未配置 Supabase' };
+    if (!supabase) return { ok: false, message: 'Supabase is not configured' };
     const trimmed = email.trim();
-    if (!trimmed || !password) return { ok: false, message: '请填写邮箱和密码' };
+    if (!trimmed || !password) return { ok: false, message: 'Please enter email and password' };
     const { error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
     if (error) return { ok: false, message: errMessage(error) };
     return { ok: true };
   }, []);
 
   const signUpWithEmail = useCallback(async (email: string, password: string): Promise<AuthResult> => {
-    if (!supabase) return { ok: false, message: '未配置 Supabase' };
+    if (!supabase) return { ok: false, message: 'Supabase is not configured' };
     const trimmed = email.trim();
-    if (!trimmed || !password) return { ok: false, message: '请填写邮箱和密码' };
-    if (password.length < 6) return { ok: false, message: '密码至少 6 位' };
+    if (!trimmed || !password) return { ok: false, message: 'Please enter email and password' };
+    if (password.length < 6) return { ok: false, message: 'Password must be at least 6 characters' };
     const { error } = await supabase.auth.signUp({ email: trimmed, password });
     if (error) return { ok: false, message: errMessage(error) };
     return { ok: true };

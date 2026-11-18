@@ -24,6 +24,35 @@ type BasemapTheme = {
   connection: string;
 };
 
+export const POI_DOT_COLOR_PALETTE = [
+  '#7DD3FC',
+  '#60A5FA',
+  '#38BDF8',
+  '#0EA5E9',
+  '#3B82F6',
+  '#2563EB',
+  '#1D4ED8',
+  '#0284C7',
+];
+
+function stableColorHash(value: number | string): number {
+  const input = String(value);
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function getPoiDotColor(seed: number | string): string {
+  return POI_DOT_COLOR_PALETTE[stableColorHash(seed) % POI_DOT_COLOR_PALETTE.length];
+}
+
+export function getPoiDotSize(seed: number | string, min = 9, spread = 11): number {
+  return min + (stableColorHash(seed) % spread);
+}
+
 const BASEMAP_THEMES: Record<BasemapThemeId, BasemapTheme> = {
   paper: {
     land: '#f7f1e4',
@@ -113,6 +142,7 @@ export class MapboxAdapter {
   private basemapTheme: BasemapThemeId = 'mist';
   private defaultStyle: string;
   private currentStyle: string;
+  private editorialStyleBound = false;
 
   constructor(
     mapboxgl: any,
@@ -139,6 +169,8 @@ export class MapboxAdapter {
       pitchWithRotate: false,
       touchPitch: false,
       antialias: false,
+      interactive: true,
+      cooperativeGestures: false,
       projection: 'mercator',
       ...( /mapbox\/standard/i.test(this.currentStyle)
         ? {
@@ -155,6 +187,7 @@ export class MapboxAdapter {
           }
         : {}),
     });
+    this.enableInteractions();
   }
 
   destroy() {
@@ -175,41 +208,9 @@ export class MapboxAdapter {
 
   applyEditorialStyle() {
     const apply = () => {
+      if (!this.shouldApplyEditorialPaint()) return;
       const style = this.map.getStyle?.();
       const layers = style?.layers ?? [];
-      const isPaperStudioStyle = this.currentStyle === PAPER_STUDIO_STYLE_URL;
-      const isCloveStudioStyle = this.currentStyle === CLOVE_STUDIO_STYLE_URL;
-      const isGreyStudioStyle = this.currentStyle === GREY_STUDIO_STYLE_URL;
-      if (isCloveStudioStyle) {
-        return;
-      }
-
-      if (isPaperStudioStyle || isGreyStudioStyle) {
-        for (const layer of layers) {
-          const id = layer.id as string;
-          const type = layer.type as string;
-
-          if (type === 'symbol' || type === 'circle' || type === 'fill-extrusion') {
-            safelySetLayoutVisibility(this.map, id, 'none');
-            continue;
-          }
-
-          if (type === 'line') {
-            if (/(road|bridge|tunnel|rail|transit|path|ferry|runway|aeroway)/i.test(id)) {
-              safelySetLayoutVisibility(this.map, id, 'none');
-              continue;
-            }
-          }
-
-          if (type === 'fill') {
-            if (/(building|airport|runway|road|bridge|tunnel|land-structure)/i.test(id)) {
-              safelySetLayoutVisibility(this.map, id, 'none');
-              continue;
-            }
-          }
-        }
-        return;
-      }
       const isLightStyle = /light-v11/i.test(this.map.getStyle?.().name || '') || /light-v11/i.test(JSON.stringify(style?.sprite || ''));
       const theme = BASEMAP_THEMES[this.basemapTheme];
       for (const layer of layers) {
@@ -330,14 +331,21 @@ export class MapboxAdapter {
     } else {
       this.map.once('style.load', apply);
     }
-    this.map.on('style.load', apply);
+    if (!this.editorialStyleBound) {
+      this.editorialStyleBound = true;
+      this.map.on('style.load', apply);
+    }
   }
 
   private resolveStyleForTheme(themeId: BasemapThemeId) {
     if (themeId === 'paper') return PAPER_STUDIO_STYLE_URL;
-    if (themeId === 'clove') return CLOVE_STUDIO_STYLE_URL;
     if (themeId === 'grey') return GREY_STUDIO_STYLE_URL;
+    if (themeId === 'clove') return CLOVE_STUDIO_STYLE_URL;
     return this.defaultStyle;
+  }
+
+  private shouldApplyEditorialPaint() {
+    return this.currentStyle === this.defaultStyle || /light-v11|standard/i.test(this.currentStyle);
   }
 
   on(event: string, handler: (evt?: any) => void) {
@@ -360,11 +368,25 @@ export class MapboxAdapter {
   }
 
   whenReady(handler: () => void) {
-    if (this.map.loaded()) {
+    let completed = false;
+    const complete = () => {
+      if (completed) return;
+      completed = true;
       handler();
+    };
+
+    if (this.map.loaded?.() || this.map.isStyleLoaded?.()) {
+      complete();
       return;
     }
-    this.map.once('load', handler);
+
+    this.map.once('load', complete);
+    this.map.once('style.load', complete);
+    this.map.once('idle', complete);
+
+    if (typeof window !== 'undefined') {
+      window.setTimeout(complete, 1200);
+    }
   }
 
   getZoom(): number {
@@ -393,15 +415,38 @@ export class MapboxAdapter {
   }
 
   zoomIn() {
-    this.map.zoomIn({ duration: 180 });
+    const currentZoom = this.map.getZoom();
+    const maxZoom = this.map.getMaxZoom?.() ?? 18;
+    this.map.easeTo({ zoom: Math.min(maxZoom, currentZoom + 1), duration: 180, essential: true });
   }
 
   zoomOut() {
-    this.map.zoomOut({ duration: 180 });
+    const currentZoom = this.map.getZoom();
+    const minZoom = this.map.getMinZoom?.() ?? 0;
+    this.map.easeTo({ zoom: Math.max(minZoom, currentZoom - 1), duration: 180, essential: true });
+  }
+
+  private enableInteractions() {
+    this.map.scrollZoom?.enable?.();
+    this.map.boxZoom?.enable?.();
+    this.map.dragPan?.enable?.();
+    this.map.doubleClickZoom?.enable?.();
+    this.map.keyboard?.enable?.();
+    this.map.touchZoomRotate?.enable?.();
+    this.map.touchZoomRotate?.disableRotation?.();
   }
 
   invalidateSize() {
-    this.map.resize();
+    this.safeResize();
+    this.safeTriggerRepaint();
+  }
+
+  refreshRender() {
+    this.safeResize();
+    if (this.map.isStyleLoaded?.()) {
+      this.applyEditorialStyle();
+    }
+    this.safeTriggerRepaint();
   }
 
   getContainer(): HTMLDivElement {
@@ -438,5 +483,25 @@ export class MapboxAdapter {
       }
       handler(evt);
     };
+  }
+
+  private safeResize() {
+    try {
+      const container = this.map.getContainer?.();
+      const hasSize = Boolean(container?.clientWidth && container?.clientHeight);
+      const canvas = this.map.getCanvas?.();
+      if (!hasSize || !canvas) return;
+      this.map.resize();
+    } catch {
+      // Mapbox can emit late lifecycle callbacks after a dev StrictMode cleanup.
+    }
+  }
+
+  private safeTriggerRepaint() {
+    try {
+      this.map.triggerRepaint?.();
+    } catch {
+      // noop
+    }
   }
 }

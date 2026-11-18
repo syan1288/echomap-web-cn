@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
+import { isGeminiProviderAvailable } from '../shared/domain/image/providerAvailability.js';
 import path from 'node:path';
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -216,7 +217,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const geminiTokenProbe = await probeGeminiToken(env);
     const imageModel = resolveImageModel(env);
     const providers = {
-      gemini: Boolean(ai),
+      gemini: isGeminiProviderAvailable(Boolean(ai), geminiTokenProbe),
       'chatgpt-image': hasOpenAiKey,
       jimeng: hasJimengKeys,
     } as const;

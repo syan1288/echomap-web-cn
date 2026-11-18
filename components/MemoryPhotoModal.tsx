@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { assertFileSizeOk } from '../constants/uploadLimits';
+import { assertFileSizeOk } from '../shared/domain/uploads/uploadLimits';
 import { isNativeApp, pickImageAsFile } from '../lib/mobile';
 
 const ICON_STROKE = 1.5;

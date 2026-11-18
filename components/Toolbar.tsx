@@ -1,11 +1,12 @@
 
 import React, { useState, useLayoutEffect, useRef } from 'react';
-import type { ProcessedImage } from '../App';
+import type { ProcessedImage } from '../web/app/webMemoryTypes';
 import { useLocalization } from '../context/LocalizationContext';
 
 interface ToolbarProps {
     selectedImage: ProcessedImage;
     map: any;
+    selectedScreenPoint?: { x: number; y: number };
     mapViewportTick?: number;
     onRegenerate: () => void;
     onFlip: () => void;
@@ -19,6 +20,7 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = ({
     selectedImage,
     map,
+    selectedScreenPoint,
     mapViewportTick = 0,
     onRegenerate,
     onFlip,
@@ -36,9 +38,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     const isActionDisabled = selectedImage.isGenerating;
 
     useLayoutEffect(() => {
-        const screenPoint = map.latLngToContainerPoint([selectedImage.lat, selectedImage.lng]);
+        const screenPoint = selectedScreenPoint ?? map.latLngToContainerPoint([selectedImage.lat, selectedImage.lng]);
         const toolbarHeight = toolbarRef.current?.offsetHeight || 200; // Estimate height
+        const toolbarWidth = toolbarRef.current?.offsetWidth || 336;
         const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
 
         const spaceBelow = viewportHeight - (screenPoint.y + selectedImage.height / 2);
         
@@ -50,14 +54,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             // Position below
             top = screenPoint.y + selectedImage.height / 2 + 15;
         }
+        const minTop = 84;
+        const maxTop = Math.max(minTop, viewportHeight - toolbarHeight - 92);
+        const minLeft = toolbarWidth / 2 + 8;
+        const maxLeft = Math.max(minLeft, viewportWidth - toolbarWidth / 2 - 8);
         
         setPosition({
-            top,
-            left: screenPoint.x,
+            top: Math.min(maxTop, Math.max(minTop, top)),
+            left: Math.min(maxLeft, Math.max(minLeft, screenPoint.x)),
             transform: 'translateX(-50%)'
         });
 
-    }, [selectedImage.lat, selectedImage.lng, selectedImage.height, map, editText, mapViewportTick]); // Rerun when map viewport changes
+    }, [selectedImage.lat, selectedImage.lng, selectedImage.height, selectedScreenPoint, map, editText, mapViewportTick]); // Rerun when map viewport changes
 
     const handleEdit = () => {
         const trimmed = editText.trim();

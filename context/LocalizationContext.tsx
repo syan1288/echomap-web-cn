@@ -2,6 +2,22 @@
 import React, { createContext, useState, useContext, useCallback, ReactNode } from 'react';
 import { translations, Language } from '../localization/translations';
 
+const LANGUAGE_STORAGE_KEY = 'echomap-language';
+
+export function resolveInitialLanguage(savedLanguage: string | null | undefined): Language {
+    if (savedLanguage === 'zh' || savedLanguage === 'en') return savedLanguage;
+    return 'en';
+}
+
+function initialLanguage(): Language {
+    if (typeof window === 'undefined') return 'en';
+    try {
+        return resolveInitialLanguage(window.localStorage.getItem(LANGUAGE_STORAGE_KEY));
+    } catch {
+        return 'en';
+    }
+}
+
 interface LocalizationContextType {
     language: Language;
     toggleLanguage: () => void;
@@ -11,10 +27,18 @@ interface LocalizationContextType {
 const LocalizationContext = createContext<LocalizationContextType | undefined>(undefined);
 
 export const LocalizationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [language, setLanguage] = useState<Language>('en');
+    const [language, setLanguage] = useState<Language>(initialLanguage);
 
     const toggleLanguage = useCallback(() => {
-        setLanguage(prevLang => (prevLang === 'en' ? 'zh' : 'en'));
+        setLanguage(prevLang => {
+            const nextLanguage = prevLang === 'en' ? 'zh' : 'en';
+            try {
+                window.localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
+            } catch {
+                // Language changes still apply for the current session.
+            }
+            return nextLanguage;
+        });
     }, []);
 
     const t = useCallback((key: string, options?: { [key: string]: string | number }): string => {

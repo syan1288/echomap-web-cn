@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import type { PhotoData } from '../App';
+import type { PhotoData } from '../web/app/webMemoryTypes';
 import { useLocalization } from '../context/LocalizationContext';
 
 interface PhotoPreviewModalProps {

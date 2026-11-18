@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import * as Tone from 'tone';
 import { generateImageWithPrompt } from './services/geminiService';
-import { assertFileSizeOk } from './constants/uploadLimits';
+import { assertFileSizeOk } from './shared/domain/uploads/uploadLimits';
 import { ImageMarker } from './components/ImageMarker';
 import { PoiDotMarker } from './components/PoiDotMarker';
 import { Toolbar } from './components/Toolbar';
@@ -20,16 +20,24 @@ import { BuildingConnectionsOverlay } from './components/BuildingConnectionsOver
 import Shuffle from './components/Shuffle';
 import { AddBuildingModal } from './components/AddBuildingModal';
 import { GallerySection } from './components/GallerySection';
-import { continentKeyFromLatLng } from './utils/geoStats';
-import { buildGeocodeQueries, hasGeographicHint } from './utils/geoFromBuildingName';
+import { continentKeyFromLatLng } from './shared/domain/geo/geoStats';
+import { buildGeocodeQueries, shouldGeocodeBuildingName } from './shared/domain/geo/geoFromBuildingName';
 import { GalleryDetailModals } from './components/GalleryDetailModals';
 import { MemoryPhotoModal } from './components/MemoryPhotoModal';
 import { MemoryAudioModal } from './components/MemoryAudioModal';
 import { AuthPanel } from './components/AuthPanel';
 import { resolveSessionAnchor, formatCityCountry } from './services/sessionGeo';
-import { normalizeLog } from './utils/normalizeLog';
-import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from './prompts/buildingStyle';
-import type { AudioEntry, LogData, PhotoData, ProcessedImage } from './types/memory';
+import { normalizeLog } from './shared/domain/memory/normalizeLog';
+import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from './shared/domain/building-style/buildingStyle';
+import {
+  cloudSaveErrorKind,
+  cloudSaveErrorReason,
+  cloudSyncSignature,
+  findLockedUnsyncedCloudSaveCandidates,
+  isCloudSaveEligible,
+  mergeCloudLoadedImages,
+} from './shared/domain/cloud/cloudSync';
+import type { AudioEntry, LogData, PhotoData, ProcessedImage } from './web/app/webMemoryTypes';
 import { useAuth } from './context/AuthContext';
 import {
   loadAllCloudBuildings,
@@ -38,12 +46,11 @@ import {
   isSupabaseConfigured,
 } from './services/cloudBuildings';
 import { apiUrl } from './lib/apiBase';
+import type { ImageProvider, ImageProviderAvailability } from './services/imageProviderAvailability';
 import { buildReverseGeocodeUrl, deploymentConfig } from './lib/deploymentConfig';
-import { parseReverseGeocodePlace } from './lib/locationAdapters';
+import { parseReverseGeocodePlace } from './shared/domain/geo/locationParsers';
 import { BASEMAP_THEME_OPTIONS, type BasemapThemeId, MapboxAdapter, createMapBounds } from './lib/mapboxAdapter';
 import { loadMapbox } from './lib/mapboxLoader';
-
-export type { AudioEntry, LogData, PhotoData, ProcessedImage } from './types/memory';
 
 /** 侧栏地理文案：Roboto 作为 Google Sans 的可加载替代 */
 const FONT_GOOGLE_SANS = '"Roboto", "Google Sans", system-ui, sans-serif';
@@ -84,11 +91,11 @@ const CLUSTER_RADIUS_PX = 90;
 /** 小于等于该 zoom 时地图仅显示黑色 POI 圆点，不显示建筑立绘 */
 const POI_DOT_ZOOM_THRESHOLD = 5;
 const MAP_ICON_BORDER_PX = 1.5;
-type ImageProvider = 'gemini' | 'jimeng' | 'chatgpt-image';
-type ImageProviderAvailability = Partial<Record<ImageProvider, boolean>>;
-
 /** Demo landmarks (locked). Set to false to start with an empty map. */
-const ECHO_SEED_DEMO_BUILDINGS = false;
+const ECHO_SEED_DEMO_BUILDINGS =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('seedDemo');
+const ECHO_PROMO_SCENE =
+  typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('promoScene') : null;
 
 /** 空状态文案在可被滚轮/拖拽/地图点击等「被动」清除前，最短展示时长（ms） */
 const EMPTY_HINT_PASSIVE_MS = 18_000;
@@ -106,38 +113,9 @@ interface PhotoPreviewState {
     currentIndex: number;
 }
 
-function buildCloudSyncSignature(img: ProcessedImage): string | null {
-  if (!img.processedImage || img.isGenerating) return null;
-  return JSON.stringify({
-    lat: img.lat,
-    lng: img.lng,
-    width: img.width,
-    height: img.height,
-    flippedHorizontally: Boolean(img.flippedHorizontally),
-    isLocked: Boolean(img.isLocked),
-    buildingStyle: img.buildingStyle ?? DEFAULT_BUILDING_STYLE,
-    contentBounds: img.contentBounds,
-    sourceFileName: img.sourceFile?.name ?? null,
-    photos: img.photos.map((photo) => ({
-      name: photo.file.name,
-      size: photo.file.size,
-      type: photo.file.type,
-      createdAt: photo.createdAt ?? null,
-      photo_id: photo.photo_id ?? null,
-    })),
-    audioEntries: img.audioEntries.map((entry) => ({
-      id: entry.id,
-      kind: entry.kind,
-      title: entry.title,
-      createdAt: entry.createdAt,
-      source: entry.source,
-      fileName: entry.file?.name ?? null,
-      fileSize: entry.file?.size ?? null,
-      url: entry.source === 'builtin' ? entry.url : null,
-    })),
-    log: img.log,
-  });
-}
+type PersistCloudImageOptions = {
+  notify?: boolean;
+};
 
 // --- HELPER FUNCTIONS ---
 
@@ -383,8 +361,12 @@ const App: React.FC = () => {
   const previewImageCache = useRef<Record<number, HTMLImageElement>>({});
   const prevImagesRef = useRef<ProcessedImage[]>([]);
   const latestImagesRef = useRef<ProcessedImage[]>([]);
+  const previousImagesForCloudSaveRef = useRef<ProcessedImage[]>([]);
   const cloudSavedSignatureRef = useRef<Map<number, string>>(new Map());
   const cloudSaveInFlightRef = useRef<Set<number>>(new Set());
+  const cloudSaveQueuedRef = useRef<Map<number, { img: ProcessedImage; options?: PersistCloudImageOptions }>>(new Map());
+  const cloudSaveRetryAttemptRef = useRef<Map<number, string>>(new Map());
+  const cloudSaveRetryUidRef = useRef<string | null>(null);
   const [animationTick, setAnimationTick] = useState(0);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
@@ -401,7 +383,7 @@ const App: React.FC = () => {
   const [showLogModal, setShowLogModal] = useState(false);
   const [showMemoryPhotoModal, setShowMemoryPhotoModal] = useState(false);
   const [showMemoryAudioModal, setShowMemoryAudioModal] = useState(false);
-  const [imageProvider, setImageProvider] = useState<ImageProvider>('jimeng');
+  const [imageProvider, setImageProvider] = useState<ImageProvider>('gemini');
   const [isLoading, setIsLoading] = useState<{ active: boolean; message: string } | null>(null);
 
   const [echoTab, setEchoTab] = useState<'home' | 'gallery'>('home');
@@ -417,15 +399,25 @@ const App: React.FC = () => {
   const passiveDismissUnlockAtRef = useRef(0);
 
   const persistCloudImage = useCallback(
-    async (img: ProcessedImage, options?: { requireLocked?: boolean }) => {
+    async (img: ProcessedImage, options?: PersistCloudImageOptions) => {
+      if (!isCloudSaveEligible(img)) return;
       const uid = user?.id;
-      if (!uid || !isSupabaseConfigured) return;
-      if (options?.requireLocked && !img.isLocked && !img.cloudId) return;
+      if (!isSupabaseConfigured) {
+        if (img.isLocked || options?.notify) setToastMessage(t('cloudSaveUnavailable'));
+        return;
+      }
+      if (!uid) {
+        if (img.isLocked || options?.notify) setToastMessage(t('cloudSaveAuthRequired'));
+        return;
+      }
 
-      const signature = buildCloudSyncSignature(img);
+      const signature = cloudSyncSignature(img);
       if (!signature) return;
       if (cloudSavedSignatureRef.current.get(img.id) === signature) return;
-      if (cloudSaveInFlightRef.current.has(img.id)) return;
+      if (cloudSaveInFlightRef.current.has(img.id)) {
+        cloudSaveQueuedRef.current.set(img.id, { img, options });
+        return;
+      }
 
       cloudSaveInFlightRef.current.add(img.id);
       try {
@@ -434,13 +426,38 @@ const App: React.FC = () => {
         setImages((prev) =>
           prev.map((entry) => (entry.id === img.id ? { ...entry, cloudId } : entry))
         );
+        if (options?.notify) {
+          setToastMessage(t('cloudPushOk', { count: 1 }));
+        }
       } catch (error) {
         console.error('cloud autosave failed', error);
+        const kind = cloudSaveErrorKind(error);
+        if (kind === 'auth') {
+          setToastMessage(t('cloudSaveAuthRequired'));
+        } else if (kind === 'quota') {
+          setToastMessage(t('cloudSaveQuotaFailed', { reason: cloudSaveErrorReason(error) }));
+        } else {
+          setToastMessage(t('cloudSaveFailedWithReason', { reason: cloudSaveErrorReason(error) }));
+        }
       } finally {
         cloudSaveInFlightRef.current.delete(img.id);
+        const queued = cloudSaveQueuedRef.current.get(img.id);
+        if (queued) {
+          cloudSaveQueuedRef.current.delete(img.id);
+          const queuedSignature = cloudSyncSignature(queued.img);
+          if (
+            isCloudSaveEligible(queued.img) &&
+            queuedSignature &&
+            cloudSavedSignatureRef.current.get(img.id) !== queuedSignature
+          ) {
+            window.setTimeout(() => {
+              void persistCloudImage(queued.img, queued.options);
+            }, 0);
+          }
+        }
       }
     },
-    [user?.id]
+    [t, user?.id]
   );
 
   const mapRef = useRef<any | null>(null);
@@ -458,16 +475,17 @@ const App: React.FC = () => {
   const [imageProviderAvailability, setImageProviderAvailability] = useState<ImageProviderAvailability | null>(null);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
     let cancelled = false;
     void (async () => {
       try {
         const r = await fetch(apiUrl('/api/echo-health'));
         if (cancelled) return;
         if (!r.ok) {
-          setDevEchoApiHint(
-            'DEV: 无法访问本地 API（/api/* 404）。请在 echomap-web 目录运行 npm run dev 或 npm run preview，并用终端打印的 http://localhost 地址打开，勿直接打开 dist/index.html。'
-          );
+          if (import.meta.env.DEV) {
+            setDevEchoApiHint(
+              'DEV: 无法访问本地 API（/api/* 404）。请在 echomap-web 目录运行 npm run dev 或 npm run preview，并用终端打印的 http://localhost 地址打开，勿直接打开 dist/index.html。'
+            );
+          }
           return;
         }
         const j = (await r.json()) as {
@@ -489,6 +507,7 @@ const App: React.FC = () => {
           jimeng: j.providers?.jimeng ?? Boolean(j.env?.hasJimengKeys),
         };
         setImageProviderAvailability(inferredProviders);
+        if (!import.meta.env.DEV) return;
         if (!j.generateConfigured) {
           setDevEchoApiHint(
             'DEV: 未配置 Gemini / OpenAI / 即梦任一出图凭证（.env）。地名搜索仍可用；3D 生成会失败直至补齐至少一种。'
@@ -497,7 +516,7 @@ const App: React.FC = () => {
         }
         setDevEchoApiHint(null);
       } catch {
-        if (!cancelled) {
+        if (!cancelled && import.meta.env.DEV) {
           setDevEchoApiHint('DEV: 无法连接本地 API。请在 echomap-web 下运行 npm run dev。');
         }
       }
@@ -824,15 +843,23 @@ const App: React.FC = () => {
     } catch (e) {
       console.error(e);
       const detail = e instanceof Error ? e.message : String(e);
-      const short = detail.length > 220 ? `${detail.slice(0, 217)}…` : detail;
-      setToastMessage(`${t('toastGenerationFailed')} ${short}`);
+      const providerNotConfigured =
+        /JIMENG_(?:ACCESS_KEY_ID|SECRET_ACCESS_KEY).*missing|OPENAI_API_KEY.*missing|Gemini API key.*missing/i.test(detail);
+      const short = providerNotConfigured
+        ? t('imageProviderNotConfigured')
+        : language === 'zh'
+          ? ''
+          : detail.length > 220
+            ? `${detail.slice(0, 217)}…`
+            : detail;
+      setToastMessage([t('toastGenerationFailed'), short].filter(Boolean).join(' '));
       setImages((prev) =>
         prev.map((img) =>
           img.id === id ? { ...img, isGenerating: false, showOriginal: true } : img
         )
       );
     }
-  }, [t, imageProvider]);
+  }, [t, imageProvider, language]);
 
   const addImageAtLatLng = useCallback((
     file: File,
@@ -922,7 +949,7 @@ const App: React.FC = () => {
         return;
       }
 
-      if (!hasGeographicHint(name)) {
+      if (!shouldGeocodeBuildingName(name)) {
         setPlacementInfo({ file, buildingName: name, buildingStyle: opts?.buildingStyle ?? DEFAULT_BUILDING_STYLE });
         setToastMessage(t('toastPlacementNoGeoHint'));
         return;
@@ -1101,7 +1128,7 @@ const App: React.FC = () => {
             ? updated
             : img
         ));
-        void persistCloudImage(updated, { requireLocked: true });
+        void persistCloudImage(updated);
     }
   }, [t, persistCloudImage]);
 
@@ -1112,7 +1139,7 @@ const App: React.FC = () => {
     setImages((prev) =>
       prev.map((img) => (img.id === memoryId ? updated : img))
     );
-    void persistCloudImage(updated, { requireLocked: true });
+    void persistCloudImage(updated);
     setShowMemoryAudioModal(false);
   }, [persistCloudImage]);
 
@@ -1146,23 +1173,29 @@ const App: React.FC = () => {
 
         const updatedPhotos = memory.photos.filter((_, idx) => idx !== photoIndex);
         const updated = { ...memory, photos: updatedPhotos };
-        void persistCloudImage(updated, { requireLocked: true });
+        void persistCloudImage(updated);
         return prev.map((img) => (img.id === memoryId ? updated : img));
       });
     },
     [selectedImageId, images, user?.id, persistCloudImage]
   );
 
-  const handleDeletePhotoFromGallery = useCallback(
-    (memoryId: number, photoIndex: number) => {
+  const handleDeletePhotosFromGallery = useCallback(
+    (memoryId: number, photoIndexes: number[]) => {
       const current = latestImagesRef.current.find((img) => img.id === memoryId);
       if (!current || current.photos.length <= 1) return;
+      const uniqueIndexes = [...new Set(photoIndexes)]
+        .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < current.photos.length)
+        .sort((a, b) => a - b);
+      if (!uniqueIndexes.length) return;
+      if (current.photos.length - uniqueIndexes.length < 1) return;
+      const removeSet = new Set(uniqueIndexes);
       const updated = {
         ...current,
-        photos: current.photos.filter((_, idx) => idx !== photoIndex),
+        photos: current.photos.filter((_, idx) => !removeSet.has(idx)),
       };
       setImages((prev) => prev.map((img) => (img.id === memoryId ? updated : img)));
-      void persistCloudImage(updated, { requireLocked: true });
+      void persistCloudImage(updated);
     },
     [persistCloudImage]
   );
@@ -1274,7 +1307,7 @@ const App: React.FC = () => {
   }, [images]);
 
   useEffect(() => {
-    const prevImagesMap = new Map(prevImagesRef.current.map(img => [img.id, img]));
+    const prevImagesMap = new Map(previousImagesForCloudSaveRef.current.map(img => [img.id, img]));
     images.forEach(img => {
         const prevImg = prevImagesMap.get(img.id);
         if (prevImg && prevImg.isGenerating && !img.isGenerating) {
@@ -1282,10 +1315,32 @@ const App: React.FC = () => {
                 await ensureAudioContext();
                 synth.triggerAttackRelease('C5', '8n');
             })();
-            void persistCloudImage(img, { requireLocked: true });
+            void persistCloudImage(img);
         }
     });
+    previousImagesForCloudSaveRef.current = images;
   }, [images, persistCloudImage]);
+
+  useEffect(() => {
+    const uid = user?.id ?? null;
+    if (cloudSaveRetryUidRef.current === uid) return;
+    cloudSaveRetryUidRef.current = uid;
+    cloudSaveRetryAttemptRef.current = new Map();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !isSupabaseConfigured) return;
+    const candidates = findLockedUnsyncedCloudSaveCandidates(
+      images,
+      cloudSaveRetryAttemptRef.current
+    );
+    candidates.forEach((img) => {
+      const signature = cloudSyncSignature(img);
+      if (!signature) return;
+      cloudSaveRetryAttemptRef.current.set(img.id, signature);
+      void persistCloudImage(img, { notify: true });
+    });
+  }, [images, persistCloudImage, user?.id]);
 
   /** 登录后自动从云端加载地图（关闭手动 push/pull 交互） */
   useEffect(() => {
@@ -1304,23 +1359,36 @@ const App: React.FC = () => {
         });
         const maxId = loaded.reduce((m, i) => Math.max(m, i.id), 0);
         nextId.current = Math.max(nextId.current, maxId + 1);
+        const currentImages = latestImagesRef.current;
+        const mergedImages = mergeCloudLoadedImages(currentImages, loaded);
+        const lockedLocalDrafts = currentImages.filter(
+          (img) => !img.cloudId && img.isLocked && !img.isGenerating && img.processedImage
+        );
+
         cloudSavedSignatureRef.current = new Map(
           loaded
             .map((img) => {
-              const signature = buildCloudSyncSignature(img);
+              const signature = cloudSyncSignature(img);
               return signature ? ([img.id, signature] as const) : null;
             })
             .filter((entry): entry is readonly [number, string] => entry !== null)
         );
-        setImages(loaded);
+        setImages(mergedImages);
         setSelectedImageId(null);
-        setToastMessage(t('cloudPullOk'));
+        setToastMessage(
+          currentImages.some((img) => !img.cloudId)
+            ? t('cloudPullOkWithLocalDrafts')
+            : t('cloudPullOk')
+        );
+        lockedLocalDrafts.forEach((img) => {
+          void persistCloudImage(img, { notify: true });
+        });
       } catch (e) {
         console.error(e);
         setToastMessage(t('cloudPullFailed'));
       }
     })();
-  }, [user?.id, t]);
+  }, [persistCloudImage, user?.id, t]);
 
   useEffect(() => {
       if (toastMessage) {
@@ -1434,7 +1502,7 @@ const App: React.FC = () => {
     void ensureAudioContext()
       .then(() => synth.triggerAttackRelease('E5', '8n'))
       .catch((error) => console.warn('lock audio skipped', error));
-    void persistCloudImage(updated);
+    void persistCloudImage(updated, { notify: true });
   };
 
   const handleUnlockSelected = async () => {
@@ -1486,7 +1554,7 @@ const App: React.FC = () => {
         },
       };
       setImages(prev => prev.map(img => img.id === selectedImageId ? updated : img));
-      void persistCloudImage(updated, { requireLocked: true });
+      void persistCloudImage(updated);
       setShowLogModal(false);
   };
 
@@ -2003,6 +2071,7 @@ const App: React.FC = () => {
           id="echo-section-home"
           className="flex h-[100dvh] min-h-[100dvh] w-full shrink-0 snap-start flex-col overflow-hidden bg-white"
           aria-label="Map"
+          style={ECHO_PROMO_SCENE === 'gallery' ? { display: 'none' } : undefined}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
           onPointerMove={handleInteractionMove}
@@ -2014,17 +2083,17 @@ const App: React.FC = () => {
           className="relative flex min-h-0 w-full flex-1 overflow-hidden"
           onPointerDownCapture={handleMapSurfacePointerDown}
         >
-        <div className="absolute top-4 right-4 z-[60] flex items-center gap-1.5 pointer-events-auto" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+        <div className="absolute top-4 right-4 z-[60] flex items-center gap-2 pointer-events-auto" style={{ top: 'calc(env(safe-area-inset-top) + 1.5rem)' }}>
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowBasemapMenu((open) => !open)}
               data-map-ui="basemap-theme"
-              className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+              className="h-[29px] w-[29px] shrink-0 overflow-visible flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Change basemap theme"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <circle cx="13.5" cy="6.5" r=".5" />
                 <circle cx="17.5" cy="10.5" r=".5" />
                 <circle cx="8.5" cy="7.5" r=".5" />
@@ -2064,11 +2133,11 @@ const App: React.FC = () => {
               mapRef.current.setView([a.lat, a.lng], Math.max(6, mapRef.current.getZoom()));
             }}
             data-map-ui="back-to-location"
-            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            className="h-[29px] w-[29px] shrink-0 overflow-visible flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label="Back to my location"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M12 21c4.6-4.1 7-7.4 7-10.2A7 7 0 1 0 5 10.8C5 13.6 7.4 16.9 12 21Z" />
               <circle cx="12" cy="10" r="2.5" />
             </svg>
@@ -2077,21 +2146,21 @@ const App: React.FC = () => {
             type="button"
             onClick={toggleLanguage}
             data-map-ui="language-toggle"
-            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[12px] font-semibold leading-none"
+            className="h-[29px] w-[29px] shrink-0 overflow-visible flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50 text-[14px] font-semibold leading-none"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
-            aria-label={t('toggleLanguage')}
+            aria-label={language === 'en' ? t('switchToChinese') : t('switchToEnglish')}
           >
-            {language === 'en' ? '中' : 'EN'}
+            {language === 'zh' ? '中' : 'EN'}
           </button>
           <button
             type="button"
             onClick={() => setShowHelpModal(true)}
             data-map-ui="help"
-            className="w-9 h-9 flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
+            className="h-[29px] w-[29px] shrink-0 overflow-visible flex items-center justify-center border border-black rounded-full text-black bg-white hover:bg-neutral-50"
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label={t('showHelp')}
           >
-            <span className="text-[14px] font-medium leading-none" aria-hidden>?</span>
+            <span className="text-[16px] font-medium leading-none" aria-hidden>?</span>
           </button>
         </div>
 
@@ -2101,7 +2170,7 @@ const App: React.FC = () => {
           className="absolute inset-0 z-[1] h-full w-full min-h-[40vh] echo-map-shell"
           style={{ opacity: mapReferenceOpacity }}
         />
-        {echoTab === 'home' && mapState.isReady && mapRef.current && (
+        {mapState.isReady && mapRef.current && (
           <BuildingConnectionsOverlay
             map={mapRef.current}
             mapViewportTick={mapViewportTick}
@@ -2111,12 +2180,12 @@ const App: React.FC = () => {
           />
         )}
 
-        {echoTab === 'home' && mapState.isReady && mapRef.current && (
-          <div className="absolute top-4 left-4 z-30 flex flex-col gap-1 pointer-events-auto" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+        {mapState.isReady && mapRef.current && (
+          <div className="absolute top-4 left-4 z-[60] flex flex-col gap-1 pointer-events-auto" style={{ top: 'calc(env(safe-area-inset-top) + 1.5rem)' }}>
             <button
               type="button"
               data-map-ui="zoom-in"
-              className="w-8 h-8 border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
+              className="h-[26px] w-[26px] border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Zoom in"
               onClick={() => {
@@ -2132,7 +2201,7 @@ const App: React.FC = () => {
             <button
               type="button"
               data-map-ui="zoom-out"
-              className="w-8 h-8 border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
+              className="h-[26px] w-[26px] border border-black bg-white flex items-center justify-center hover:bg-neutral-100"
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Zoom out"
               onClick={() => {
@@ -2147,11 +2216,11 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {echoTab === 'home' && mapState.isReady && (
+        {mapState.isReady && (
             <SearchControl onLocationSelect={handleLocationSelect} />
         )}
         
-        {echoTab === 'home' && mapState.isReady && mapRef.current && (
+        {mapState.isReady && mapRef.current && (
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
                 {(() => {
                   const mapZoom = mapRef.current!.getZoom();
@@ -2296,11 +2365,11 @@ const App: React.FC = () => {
                     setMapExplored(true);
                     setShowAddBuildingModal(true);
                   }}
-                  className="w-11 h-11 rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
+                  className="h-[29px] w-[29px] shrink-0 overflow-visible rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
                   style={{ borderWidth: MAP_ICON_BORDER_PX }}
                   aria-label={t('hammerAddBuilding')}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                       <rect x="4" y="8.6" width="16" height="10.4" rx="2" />
                       <circle cx="12" cy="13.5" r="2.2" />
                       <path d="M12 1.2v8.2" />
@@ -2310,11 +2379,11 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => void handleExport()}
-                  className="w-11 h-11 rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
+                  className="h-[29px] w-[29px] shrink-0 overflow-visible rounded-full border border-black bg-white flex items-center justify-center shadow-sm hover:bg-neutral-50 transition-colors"
                   style={{ borderWidth: MAP_ICON_BORDER_PX }}
                   aria-label={t('exportMap')}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
@@ -2371,7 +2440,7 @@ const App: React.FC = () => {
               scrollToGallery()
             }
           >
-            <span>Scroll for more</span>
+            <span>{t('scrollForMore')}</span>
             <svg
               className="mt-1.5 block shrink-0"
               width={36}
@@ -2396,7 +2465,7 @@ const App: React.FC = () => {
         <section
           id="echo-section-gallery"
           className="flex h-[100dvh] min-h-[100dvh] w-full shrink-0 snap-start flex-col overflow-hidden bg-[#F9F1E2]"
-          aria-label="Gallery"
+          aria-label={t('galleryTab')}
         >
             <GallerySection
               buildings={lockedGalleryBuildings}
@@ -2513,11 +2582,11 @@ const App: React.FC = () => {
         openM04={galleryOpenM04}
         photos={galleryBuilding?.photos ?? []}
         audioEntries={galleryBuilding?.audioEntries ?? []}
-        onDeletePhoto={
+        onDeletePhotos={
           galleryDetailId === null
             ? undefined
-            : (photoIndex) => {
-                handleDeletePhotoFromGallery(galleryDetailId, photoIndex);
+            : (photoIndexes) => {
+                handleDeletePhotosFromGallery(galleryDetailId, photoIndexes);
               }
         }
         log={

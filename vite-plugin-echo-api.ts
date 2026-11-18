@@ -9,6 +9,19 @@ import {
   DEFAULT_BUILDING_STYLE,
   isBuildingStyleId,
 } from './prompts/buildingStyle';
+import { buildMemorySharePayload } from './lib/memorySharePayload';
+import { getAuthenticatedUser, type HeaderLike } from './server/authUser';
+import { handleGenerationQuotaRequest } from './server/generationQuotaApiCore';
+import { handleUsageQuotaRequest } from './server/usageQuotaApiCore';
+import { createPaymentOrder, listPaymentPlans } from './server/paymentOrders';
+import { handleWechatPayNotify } from './server/wechatPayNotify';
+import { handleSupabaseSendSmsHook } from './server/supabaseSmsHook';
+import { isGeminiProviderAvailable } from './shared/domain/image/providerAvailability';
+import {
+  consumeGenerationEntitlement,
+  getGenerationEntitlement,
+  type GenerationEntitlement,
+} from './server/entitlements';
 
 const MAX_JSON_BODY_CHARS = 22 * 1024 * 1024; // ~16MB binary as base64 upper bound guard
 
@@ -45,6 +58,61 @@ export interface EchoApiEnv {
   GEMINI_IMAGE_MODEL?: string;
   ECHO_IMAGE_MODEL?: string;
   ECHO_PREFER_API_KEY?: string;
+  SUPABASE_URL?: string;
+  SUPABASE_ANON_KEY?: string;
+  VITE_SUPABASE_URL?: string;
+  VITE_SUPABASE_ANON_KEY?: string;
+  ECHO_GENERATION_QUOTA_ENABLED?: string;
+  ECHO_ENTITLEMENTS_STORE?: string;
+  ECHO_ENTITLEMENTS_STORE_PATH?: string;
+  ECHO_ENTITLEMENTS_TABLE?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  ECHO_FREE_STARTER_GENERATIONS?: string;
+  ECHO_FREE_MONTHLY_GENERATIONS?: string;
+  ECHO_PLUS_MONTHLY_GENERATIONS?: string;
+  ECHO_PRO_MONTHLY_GENERATIONS?: string;
+  ECHO_INITIAL_EXTRA_CREDITS?: string;
+  ECHO_USAGE_QUOTA_ENABLED?: string;
+  ECHO_FREE_LANDMARK_LIMIT?: string;
+  ECHO_FREE_PHOTO_LIMIT?: string;
+  ECHO_FREE_STORAGE_BYTES?: string;
+  ECHO_PLUS_LANDMARK_LIMIT?: string;
+  ECHO_PLUS_PHOTO_LIMIT?: string;
+  ECHO_PLUS_STORAGE_BYTES?: string;
+  ECHO_PRO_LANDMARK_LIMIT?: string;
+  ECHO_PRO_PHOTO_LIMIT?: string;
+  ECHO_PRO_STORAGE_BYTES?: string;
+  ECHO_PAYMENT_PROVIDER?: string;
+  ECHO_PAYMENT_ORDERS_PATH?: string;
+  ECHO_PLUS_PAYMENT_URL?: string;
+  ECHO_PRO_PAYMENT_URL?: string;
+  ECHO_PLUS_PAYMENT_INSTRUCTIONS?: string;
+  ECHO_PRO_PAYMENT_INSTRUCTIONS?: string;
+  ECHO_PLUS_PAYMENT_AMOUNT_CNY?: string;
+  ECHO_PRO_PAYMENT_AMOUNT_CNY?: string;
+  ECHO_PLUS_PAYMENT_CREDITS?: string;
+  ECHO_PRO_PAYMENT_CREDITS?: string;
+  WECHAT_PAY_APPID?: string;
+  WECHAT_PAY_MCHID?: string;
+  WECHAT_PAY_MERCHANT_SERIAL_NO?: string;
+  WECHAT_PAY_MERCHANT_PRIVATE_KEY?: string;
+  WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH?: string;
+  WECHAT_PAY_NOTIFY_URL?: string;
+  WECHAT_PAY_API_V3_KEY?: string;
+  WECHAT_PAY_PLATFORM_PUBLIC_KEY?: string;
+  WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH?: string;
+  WECHAT_PAY_PLATFORM_SERIAL_NO?: string;
+  SUPABASE_SEND_SMS_HOOK_SECRET?: string;
+  TENCENTCLOUD_SECRET_ID?: string;
+  TENCENTCLOUD_SECRET_KEY?: string;
+  TENCENT_SMS_REGION?: string;
+  TENCENT_SMS_ENDPOINT?: string;
+  TENCENT_SMS_SDK_APP_ID?: string;
+  TENCENT_SMS_SIGN_NAME?: string;
+  TENCENT_SMS_TEMPLATE_ID?: string;
+  TENCENT_SMS_TEMPLATE_PARAMS?: string;
+  TENCENT_SMS_OTP_TTL_MINUTES?: string;
+  TENCENT_SMS_SESSION_PREFIX?: string;
 }
 
 type GeminiTokenProbe = {
@@ -52,6 +120,55 @@ type GeminiTokenProbe = {
   ok: boolean;
   detail?: string;
 };
+
+function isQuotaEnabled(env: EchoApiEnv): boolean {
+  const raw = env.ECHO_GENERATION_QUOTA_ENABLED?.trim().toLowerCase();
+  return raw !== 'false' && raw !== '0' && raw !== 'off';
+}
+
+async function authorizeGeneration(
+  headers: HeaderLike,
+  env: EchoApiEnv
+): Promise<
+  | { ok: true; userId: string | null }
+  | { ok: false; status: 401 | 402 | 503; body: Record<string, unknown> }
+> {
+  if (!isQuotaEnabled(env)) return { ok: true, userId: null };
+
+  const auth = await getAuthenticatedUser(headers, env);
+  if (auth.ok === false) {
+    return {
+      ok: false,
+      status: auth.status,
+      body: {
+        error: auth.status === 401 ? 'Login required before generating images.' : auth.error,
+        code: auth.status === 401 ? 'AUTH_REQUIRED' : 'AUTH_CONFIG_MISSING',
+      },
+    };
+  }
+
+  const entitlement = await getGenerationEntitlement(auth.userId, env);
+  if (!entitlement.allowed) {
+    return {
+      ok: false,
+      status: 402,
+      body: {
+        error: 'Free generation quota used up. Upgrade or wait until next month.',
+        code: 'GENERATION_QUOTA_EXHAUSTED',
+        entitlement,
+      },
+    };
+  }
+
+  return { ok: true, userId: auth.userId };
+}
+
+async function consumeQuotaForSuccess(
+  userId: string | null,
+  env: EchoApiEnv
+): Promise<GenerationEntitlement | null> {
+  return userId ? consumeGenerationEntitlement(userId, env) : null;
+}
 
 function resolveOpenAIImageModel(env: EchoApiEnv): string {
   const explicit = env.OPENAI_IMAGE_MODEL?.trim();
@@ -418,7 +535,13 @@ function resolveJimengConfig(env: EchoApiEnv) {
     ? Math.round(parsedSize)
     : 2048 * 2048;
   const parsedScale = Number(env.JIMENG_SCALE);
-  const scale = Number.isFinite(parsedScale) && parsedScale >= 1 && parsedScale <= 100 ? Math.round(parsedScale) : 50;
+  const scale = Number.isFinite(parsedScale) && parsedScale > 0
+    ? parsedScale <= 1
+      ? Math.round(parsedScale * 100)
+      : parsedScale <= 100
+        ? Math.round(parsedScale)
+        : 65
+    : 65;
   return { accessKeyId, secretAccessKey, baseUrl, reqKey, region, service, size, scale };
 }
 
@@ -444,6 +567,7 @@ async function requestJimengImageEdit(args: {
     req_key: conf.reqKey,
     image_urls: args.imageUrls.slice(0, 14),
     prompt: args.prompt,
+    scale: conf.scale,
   };
   const submitText = JSON.stringify(submitBody);
   const submitSha = sha256Hex(submitText);
@@ -875,6 +999,9 @@ function extractInlineImageFromResponse(response: {
  * Dev / preview：
  * - POST /api/generate → Google Gemini（Vertex 或 GEMINI_API_KEY）
  * - POST /api/geocode → 优先高德 Web 服务，其次回退到 Nominatim / Open-Meteo
+ * - POST /api/auth/send-sms-hook → Supabase Send SMS Hook（腾讯云短信）
+ * - POST /api/share-memories → 生成系统分享 / 微信朋友圈 / 小红书分享 payload
+ * - POST /api/usage-quota → 服务端保存容量配额
  * - GET  /api/echo-health → 检查本地 API 与生成凭证是否就绪
  */
 export function echoApiPlugin(env: EchoApiEnv): Plugin {
@@ -921,7 +1048,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
           const ai = getAi();
           const geminiTokenProbe = await probeGeminiToken(env);
           const providers = {
-            gemini: Boolean(ai),
+            gemini: isGeminiProviderAvailable(Boolean(ai), geminiTokenProbe),
             'chatgpt-image': hasOpenAiKey,
             jimeng: hasJimengKeys,
           } as const;
@@ -974,6 +1101,232 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
         return;
       }
 
+      if (pathname === '/api/auth/send-sms-hook') {
+        let raw = '';
+        try {
+          raw = await readBody(req);
+        } catch {
+          res.statusCode = 413;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              error: {
+                http_code: 413,
+                message: 'payload too large',
+              },
+            })
+          );
+          return;
+        }
+
+        const result = await handleSupabaseSendSmsHook(raw, req.headers as HeaderLike, env);
+        res.statusCode = result.status;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(JSON.stringify(result.body));
+        logLine('send_sms_hook_result', { status: result.status });
+        return;
+      }
+
+      if (pathname === '/api/share-memories') {
+        let raw = '';
+        try {
+          raw = await readBody(req);
+        } catch {
+          res.statusCode = 413;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'payload too large' }));
+          logLine('share_memories_reject', { reason: 'payload_too_large' });
+          return;
+        }
+
+        let body: Record<string, unknown> | null = null;
+        try {
+          body = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          body = null;
+        }
+
+        const result = buildMemorySharePayload(body);
+        if (!result.ok) {
+          res.statusCode = result.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: result.error }));
+          logLine('share_memories_reject', { reason: result.error });
+          return;
+        }
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(JSON.stringify(result.payload));
+        logLine('share_memories_ok', {
+          platform: result.payload.platform,
+          selectedCount: result.payload.content.selectedCount,
+        });
+        return;
+      }
+
+      if (pathname === '/api/usage-quota') {
+        let raw = '';
+        try {
+          raw = await readBody(req);
+        } catch {
+          res.statusCode = 413;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'payload too large' }));
+          logLine('usage_quota_reject', { reason: 'payload_too_large' });
+          return;
+        }
+
+        let body: Record<string, unknown> = {};
+        try {
+          body = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          body = {};
+        }
+
+        const result = await handleUsageQuotaRequest(req.headers as HeaderLike, body, env);
+        res.statusCode = result.status;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(JSON.stringify(result.body));
+        logLine('usage_quota_result', {
+          status: result.status,
+          allowed: result.body.allowed ?? null,
+          action: body.action ?? null,
+        });
+        return;
+      }
+
+      if (pathname === '/api/generation-quota') {
+        const result = await handleGenerationQuotaRequest(req.headers as HeaderLike, env);
+        res.statusCode = result.status;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(JSON.stringify(result.body));
+        logLine('generation_quota_result', {
+          status: result.status,
+          allowed: result.body.allowed ?? null,
+        });
+        return;
+      }
+
+      if (pathname === '/api/payments/create-order') {
+        if (req.method === 'GET') {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ plans: listPaymentPlans(env).filter((plan) => plan.enabled) }));
+          return;
+        }
+
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'method not allowed' }));
+          return;
+        }
+
+        const auth = await getAuthenticatedUser(req.headers as HeaderLike, env);
+        if (auth.ok === false) {
+          res.statusCode = auth.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(
+            JSON.stringify({
+              error: auth.status === 401 ? 'Login required before creating payment order.' : auth.error,
+              code: auth.status === 401 ? 'AUTH_REQUIRED' : 'AUTH_CONFIG_MISSING',
+            })
+          );
+          return;
+        }
+
+        let raw = '';
+        try {
+          raw = await readBody(req);
+        } catch {
+          res.statusCode = 413;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'payload too large' }));
+          return;
+        }
+
+        let body: Record<string, unknown> = {};
+        try {
+          body = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'invalid JSON body' }));
+          return;
+        }
+
+        try {
+          const order = await createPaymentOrder(
+            {
+              userId: auth.userId,
+              planId: typeof body.planId === 'string' ? body.planId : '',
+              contact: typeof body.contact === 'string' ? body.contact : null,
+            },
+            env
+          );
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ order }));
+        } catch (error) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'unable to create order' }));
+        }
+        return;
+      }
+
+      if (pathname === '/api/payments/wechat/notify') {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'method not allowed' }));
+          return;
+        }
+
+        let raw = '';
+        try {
+          raw = await readBody(req);
+        } catch {
+          res.statusCode = 413;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'payload too large' }));
+          return;
+        }
+
+        try {
+          const result = await handleWechatPayNotify(
+            {
+              headers: req.headers as Record<string, string | string[] | undefined>,
+              rawBody: raw,
+            },
+            env
+          );
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify(result));
+        } catch (error) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(
+            JSON.stringify({
+              code: 'FAIL',
+              message: error instanceof Error ? error.message : 'unable to handle WeChat Pay notification',
+            })
+          );
+        }
+        return;
+      }
+
       if (pathname === '/api/generate') {
         const reqId = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
         const t0 = Date.now();
@@ -1005,6 +1358,15 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             res.statusCode = 400;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ error: 'imageBase64 required' }));
+            return;
+          }
+
+          const quota = await authorizeGeneration(req.headers as HeaderLike, env);
+          if (quota.ok === false) {
+            res.statusCode = quota.status;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'no-store');
+            res.end(JSON.stringify(quota.body));
             return;
           }
 
@@ -1050,6 +1412,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
               : wantsJimeng
                 ? resolveJimengConfig(env).reqKey
                 : imageModel,
+            jimengScale: wantsJimeng ? resolveJimengConfig(env).scale : null,
             requestedModel: body.preferredModel || 'gemini',
             buildingStyle,
             backend: wantsOpenAI
@@ -1073,6 +1436,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             });
             const ms = Date.now() - t0;
             logLine('generate_ok', { reqId, ms, model: openai.model, backend: 'openai' });
+            const entitlement = await consumeQuotaForSuccess(quota.userId, env);
             res.setHeader('Content-Type', 'application/json');
             res.end(
               JSON.stringify({
@@ -1080,6 +1444,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
                 model: openai.model,
                 requestedModel: body.preferredModel || 'gemini',
                 backend: openai.backend,
+                entitlement,
               })
             );
             return;
@@ -1092,6 +1457,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             });
             const ms = Date.now() - t0;
             logLine('generate_ok', { reqId, ms, model: jimeng.model, backend: 'jimeng' });
+            const entitlement = await consumeQuotaForSuccess(quota.userId, env);
             res.setHeader('Content-Type', 'application/json');
             res.end(
               JSON.stringify({
@@ -1099,6 +1465,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
                 model: jimeng.model,
                 requestedModel: body.preferredModel || 'gemini',
                 backend: jimeng.backend,
+                entitlement,
               })
             );
             return;
@@ -1145,6 +1512,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
 
           const ms = Date.now() - t0;
           logLine('generate_ok', { reqId, ms, model: imageModel });
+          const entitlement = await consumeQuotaForSuccess(quota.userId, env);
 
           res.setHeader('Content-Type', 'application/json');
           res.end(
@@ -1153,6 +1521,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
               model: imageModel,
               requestedModel: body.preferredModel || 'gemini',
               backend: env.GOOGLE_CLOUD_PROJECT ? 'vertex-ai' : 'google-genai',
+              entitlement,
             })
           );
         } catch (e: unknown) {
