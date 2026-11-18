@@ -17,8 +17,34 @@ export type ProviderErrorDetail = {
   category: ProviderErrorCategory;
 };
 
+export type ProviderErrorRuntimeInfo = {
+  errorName: string | null;
+  syscall: string | null;
+  causeName: string | null;
+  causeCode: string | null;
+  causeSyscall: string | null;
+};
+
 function errorRecord(error: unknown): Record<string, unknown> {
   return error && typeof error === 'object' ? (error as Record<string, unknown>) : {};
+}
+
+function safeRuntimeField(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const field = value.trim();
+  return /^[A-Za-z0-9_.-]{1,48}$/.test(field) ? field : null;
+}
+
+export function getProviderErrorRuntimeInfo(error: unknown): ProviderErrorRuntimeInfo {
+  const record = errorRecord(error);
+  const cause = errorRecord(record.cause);
+  return {
+    errorName: safeRuntimeField(record.name),
+    syscall: safeRuntimeField(record.syscall),
+    causeName: safeRuntimeField(cause.name),
+    causeCode: safeRuntimeField(cause.code),
+    causeSyscall: safeRuntimeField(cause.syscall),
+  };
 }
 
 function errorText(error: unknown): string {

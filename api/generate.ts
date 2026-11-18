@@ -10,7 +10,10 @@ import {
   getGenerationEntitlement,
   type GenerationEntitlement,
 } from '../server/entitlements.js';
-import { describeProviderError } from '../shared/domain/image/providerError.js';
+import {
+  describeProviderError,
+  getProviderErrorRuntimeInfo,
+} from '../shared/domain/image/providerError.js';
 
 type EchoApiEnv = {
   API_KEY?: string;
@@ -417,6 +420,7 @@ async function requestJimengImageEdit(args: {
   env: EchoApiEnv;
   imageUrls: string[];
   prompt: string;
+  onStage?: (stage: string) => void;
 }): Promise<{ imageUrl: string; model: string; backend: 'jimeng' }> {
   const conf = resolveJimengConfig(args.env);
   if (!conf.accessKeyId || !conf.secretAccessKey) {
@@ -452,6 +456,7 @@ async function requestJimengImageEdit(args: {
     service: conf.service,
     xDate: submitXDate,
   });
+  args.onStage?.('jimeng-submit-fetch');
   const submitResponse = await fetch(submitRequest.url, {
     method: 'POST',
     headers: {
@@ -462,6 +467,7 @@ async function requestJimengImageEdit(args: {
     },
     body: submitText,
   });
+  args.onStage?.('jimeng-submit-response');
   const submitRaw = await submitResponse.text();
   let submitJson: unknown = null;
   try {
@@ -509,6 +515,7 @@ async function requestJimengImageEdit(args: {
       service: conf.service,
       xDate: resultXDate,
     });
+    args.onStage?.('jimeng-result-fetch');
     const resultResponse = await fetch(resultRequest.url, {
       method: 'POST',
       headers: {
@@ -519,6 +526,7 @@ async function requestJimengImageEdit(args: {
       },
       body: resultText,
     });
+    args.onStage?.('jimeng-result-response');
     const resultRaw = await resultResponse.text();
     let resultJson: unknown = null;
     try {
@@ -824,11 +832,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const quotaUserId = await authorizeGeneration(req, res);
   if (isQuotaEnabled() && !quotaUserId) return;
 
+  let providerStage = 'provider-setup';
   try {
     const env = envFromProcess();
     const wantsJimeng = body.preferredModel === 'jimeng';
     const wantsOpenAI = body.preferredModel === 'chatgpt-image';
     const provider = wantsOpenAI ? 'ChatGPT Image' : wantsJimeng ? 'Jimeng' : 'Gemini';
+    providerStage = 'provider-client-init';
     const ai = wantsOpenAI || wantsJimeng ? null : createGenAI(env);
     if (!wantsOpenAI && !wantsJimeng && !ai) {
       res.statusCode = 503;
@@ -860,6 +870,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     ].join('\n');
 
     if (wantsOpenAI) {
+      providerStage = 'chatgpt-image-edit';
       const openai = await requestOpenAIImageEdit({
         env,
         imageBase64: body.imageBase64,
@@ -886,6 +897,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         env,
         imageUrls: body.imageUrls ?? [],
         prompt: stitchedPrompt,
+        onStage: (stage) => {
+          providerStage = stage;
+        },
       });
       const entitlement = await consumeQuotaForSuccess(quotaUserId);
       res.statusCode = 200;
@@ -903,8 +917,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    const requestImage = async (promptText: string) =>
-      ai.models.generateContent({
+    const requestImage = async (promptText: string) => {
+      providerStage = 'gemini-generate-content';
+      return ai.models.generateContent({
         model: imageModel,
         contents: [
           {
@@ -926,6 +941,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           responseModalities: [Modality.IMAGE],
         },
       });
+    };
 
     const toExtractInput = (response: unknown) =>
       response as {
@@ -940,13 +956,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       };
 
     let response = await requestImage(stitchedPrompt);
+    providerStage = 'gemini-response-parse';
     let extracted = extractInlineImageFromResponse(toExtractInput(response));
     if ('error' in extracted) {
       const retryPrompt =
         `${stitchedPrompt}\n\n` +
         'Output requirement: return only one generated image. Do not return explanation text. ' +
         'If you cannot comply, still return an image attempt instead of text.';
+      providerStage = 'gemini-generate-retry';
       response = await requestImage(retryPrompt);
+      providerStage = 'gemini-retry-response-parse';
       extracted = extractInlineImageFromResponse(toExtractInput(response));
     }
 
@@ -987,7 +1006,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           : resolveImageModel(env);
     console.error(
       '[generation] provider failure',
-      JSON.stringify({ requestId, provider: requestedProvider, model, ...detail })
+      JSON.stringify({
+        requestId,
+        provider: requestedProvider,
+        model,
+        stage: providerStage,
+        ...detail,
+        runtime: getProviderErrorRuntimeInfo(e),
+      })
     );
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
