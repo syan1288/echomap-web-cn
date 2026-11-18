@@ -17,6 +17,7 @@ import { createPaymentOrder, listPaymentPlans } from './server/paymentOrders';
 import { handleWechatPayNotify } from './server/wechatPayNotify';
 import { handleSupabaseSendSmsHook } from './server/supabaseSmsHook';
 import { isGeminiProviderAvailable } from './shared/domain/image/providerAvailability';
+import { describeProviderError } from './shared/domain/image/providerError';
 import {
   consumeGenerationEntitlement,
   getGenerationEntitlement,
@@ -1341,6 +1342,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
           return;
         }
 
+        let requestedProvider: 'Gemini' | 'Jimeng' | 'ChatGPT Image' = 'Gemini';
         try {
           const body = JSON.parse(raw) as {
             imageBase64?: string;
@@ -1354,6 +1356,12 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             /** gemini | jimeng | chatgpt-image */
             preferredModel?: 'gemini' | 'jimeng' | 'chatgpt-image';
           };
+          requestedProvider =
+            body.preferredModel === 'jimeng'
+              ? 'Jimeng'
+              : body.preferredModel === 'chatgpt-image'
+                ? 'ChatGPT Image'
+                : 'Gemini';
           if (!body.imageBase64) {
             res.statusCode = 400;
             res.setHeader('Content-Type', 'application/json');
@@ -1372,6 +1380,12 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
 
           const wantsJimeng = body.preferredModel === 'jimeng';
           const wantsOpenAI = body.preferredModel === 'chatgpt-image';
+          const provider = wantsOpenAI ? 'ChatGPT Image' : wantsJimeng ? 'Jimeng' : 'Gemini';
+          const model = wantsOpenAI
+            ? resolveOpenAIImageModel(env)
+            : wantsJimeng
+              ? resolveJimengConfig(env).reqKey
+              : imageModel;
           const ai = wantsOpenAI || wantsJimeng ? null : getAi();
           if (!wantsOpenAI && !wantsJimeng && !ai) {
             res.statusCode = 503;
@@ -1505,8 +1519,16 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             extracted = extractInlineImageFromResponse(response as Record<string, unknown>);
           }
           if ('error' in extracted) {
-            logLine('generate_no_image', { reqId, ...extracted.logPayload, error: extracted.error });
-            throw new Error(extracted.error);
+            const detail = describeProviderError(provider, new Error(extracted.error));
+            logLine('generate_no_image', {
+              reqId,
+              provider,
+              model,
+              status: detail.status,
+              code: detail.code,
+              category: detail.category,
+            });
+            throw new Error(detail.message);
           }
           const imageUrl = extracted.imageUrl;
 
@@ -1525,11 +1547,19 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             })
           );
         } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          logLine('generate_error', { reqId, ms: Date.now() - t0, error: msg });
+          const detail = describeProviderError(requestedProvider, e);
+          logLine('generate_error', {
+            reqId,
+            ms: Date.now() - t0,
+            provider: requestedProvider,
+            status: detail.status,
+            code: detail.code,
+            category: detail.category,
+          });
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: msg }));
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ ...detail, error: detail.message, requestId: reqId }));
         }
         return;
       }

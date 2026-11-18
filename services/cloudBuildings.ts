@@ -3,6 +3,7 @@ import { apiUrl } from '../lib/apiBase';
 import type { AudioEntry, ProcessedImage, PhotoData, LogData } from '../web/app/webMemoryTypes';
 import { normalizeLog } from '../shared/domain/memory/normalizeLog';
 import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from '../shared/domain/building-style/buildingStyle';
+import { mapWithConcurrency } from '../shared/domain/cloud/concurrentMap';
 
 export { isSupabaseConfigured };
 
@@ -155,31 +156,42 @@ async function imageElementToPngBlob(el: HTMLImageElement): Promise<Blob> {
   return blob;
 }
 
-/** 列出云端建筑并还原为 ProcessedImage（由调用方分配本地递增 id） */
-export async function loadAllCloudBuildings(nextLocalId: () => number): Promise<ProcessedImage[]> {
+/** 列出当前用户的云端建筑并还原为 ProcessedImage。RLS 仍是实际访问控制边界。 */
+export async function loadAllCloudBuildings(
+  nextLocalId: () => number,
+  userId: string
+): Promise<ProcessedImage[]> {
   if (!supabase) return [];
 
+  const queryStartedAt = Date.now();
   const { data: rows, error } = await supabase
     .from('buildings')
     .select('*')
+    .eq('user_id', userId)
     .order('updated_at', { ascending: false });
 
   if (error) throw error;
+  console.info('[cloud] buildings query complete', {
+    elapsedMs: Date.now() - queryStartedAt,
+    rowCount: rows?.length ?? 0,
+  });
   if (!rows?.length) return [];
 
-  const out: ProcessedImage[] = [];
-  for (const raw of rows as BuildingRow[]) {
-    const localId = nextLocalId();
+  const cloudRows = rows as BuildingRow[];
+  const localIds = cloudRows.map(() => nextLocalId());
+  return mapWithConcurrency(cloudRows, 3, async (raw, rowIndex) => {
+    const rowStartedAt = Date.now();
+    const localId = localIds[rowIndex];
     let processedImage: HTMLImageElement | null = null;
     if (raw.processed_image_path) {
       const { data: blob, error: dl } = await supabase.storage.from(BUCKET).download(raw.processed_image_path);
       if (dl) {
-        console.warn('[cloud] processed download', raw.processed_image_path, dl.message);
+        console.warn('[cloud] processed download failed', dl.message);
       } else if (blob) {
         try {
           processedImage = await blobToImage(blob);
         } catch (e) {
-          console.warn('[cloud] processed decode', raw.processed_image_path, e);
+          console.warn('[cloud] processed decode failed', e);
           processedImage = null;
         }
       }
@@ -191,7 +203,7 @@ export async function loadAllCloudBuildings(nextLocalId: () => number): Promise<
       if (!meta?.path) continue;
       const { data: pb, error: pe } = await supabase.storage.from(BUCKET).download(meta.path);
       if (pe || !pb) {
-        console.warn('[cloud] photo download', meta.path, pe?.message);
+        console.warn('[cloud] photo download failed', pe?.message);
         continue;
       }
       if (!pb.size) continue;
@@ -228,7 +240,7 @@ export async function loadAllCloudBuildings(nextLocalId: () => number): Promise<
       if (!entry.path) continue;
       const { data: ab, error: ae } = await supabase.storage.from(BUCKET).download(entry.path);
       if (ae || !ab || !ab.size) {
-        console.warn('[cloud] audio download', entry.path, ae?.message);
+        console.warn('[cloud] audio download failed', ae?.message);
         continue;
       }
       const file = new File([ab], entry.name || `audio-${i}.webm`, { type: ab.type || 'audio/webm' });
@@ -261,7 +273,7 @@ export async function loadAllCloudBuildings(nextLocalId: () => number): Promise<
       landmark_id: localId,
     });
 
-    out.push({
+    const building: ProcessedImage = {
       id: localId,
       cloudId: raw.id,
       processedImage,
@@ -278,9 +290,17 @@ export async function loadAllCloudBuildings(nextLocalId: () => number): Promise<
       audioEntries,
       log,
       sourceFile: photos[0]?.file,
+    };
+    console.info('[cloud] building media loaded', {
+      rowIndex: rowIndex + 1,
+      rowCount: rows.length,
+      elapsedMs: Date.now() - rowStartedAt,
+      hasProcessedImage: Boolean(processedImage),
+      photoCount: photos.length,
+      audioCount: audioEntries.length,
     });
-  }
-  return out;
+    return building;
+  });
 }
 
 /** 生成完成后的建筑写入 Storage + buildings 表；返回 cloudId（uuid） */

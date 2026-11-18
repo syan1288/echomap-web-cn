@@ -3,13 +3,14 @@ import { GoogleGenAI, Modality } from '@google/genai';
 import path from 'node:path';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { getAuthenticatedUser, type HeaderLike } from '../server/authUser.js';
 import {
   consumeGenerationEntitlement,
   getGenerationEntitlement,
   type GenerationEntitlement,
 } from '../server/entitlements.js';
+import { describeProviderError } from '../shared/domain/image/providerError.js';
 
 type EchoApiEnv = {
   API_KEY?: string;
@@ -818,6 +819,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  const requestId = randomUUID();
+  res.setHeader('X-Echo-Request-Id', requestId);
   const quotaUserId = await authorizeGeneration(req, res);
   if (isQuotaEnabled() && !quotaUserId) return;
 
@@ -825,6 +828,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const env = envFromProcess();
     const wantsJimeng = body.preferredModel === 'jimeng';
     const wantsOpenAI = body.preferredModel === 'chatgpt-image';
+    const provider = wantsOpenAI ? 'ChatGPT Image' : wantsJimeng ? 'Jimeng' : 'Gemini';
     const ai = wantsOpenAI || wantsJimeng ? null : createGenAI(env);
     if (!wantsOpenAI && !wantsJimeng && !ai) {
       res.statusCode = 503;
@@ -953,7 +957,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.end(
       JSON.stringify(
         'error' in extracted
-          ? { error: extracted.error }
+          ? (() => {
+              const detail = describeProviderError(provider, new Error(extracted.error));
+              return { ...detail, error: detail.message, requestId };
+            })()
           : {
               imageUrl: extracted.imageUrl,
               model: imageModel,
@@ -964,9 +971,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       )
     );
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const requestedProvider =
+      body.preferredModel === 'jimeng'
+        ? 'Jimeng'
+        : body.preferredModel === 'chatgpt-image'
+          ? 'ChatGPT Image'
+          : 'Gemini';
+    const detail = describeProviderError(requestedProvider, e);
+    const env = envFromProcess();
+    const model =
+      body.preferredModel === 'jimeng'
+        ? resolveJimengConfig(env).reqKey
+        : body.preferredModel === 'chatgpt-image'
+          ? resolveOpenAIImageModel(env)
+          : resolveImageModel(env);
+    console.error(
+      '[generation] provider failure',
+      JSON.stringify({ requestId, provider: requestedProvider, model, ...detail })
+    );
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ error: msg }));
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(JSON.stringify({ ...detail, error: detail.message, requestId }));
   }
 }

@@ -105,6 +105,7 @@ export const generateImageWithPrompt = async (
     requestedModel?: PreferredImageModel;
     backend?: string;
     code?: string;
+    requestId?: string;
   };
 
   if (!res.ok) {
@@ -120,7 +121,8 @@ export const generateImageWithPrompt = async (
           'POST /api/generate returned 404. Start the app with `npm run dev` or `npm run preview` in echomap-web (static file hosting has no API unless you deploy a backend).'
       );
     }
-    throw new Error(data.error || `Generate failed (${res.status})`);
+    const message = data.error || `Generate failed (${res.status})`;
+    throw new Error(data.requestId ? `${message} (Request ID: ${data.requestId})` : message);
   }
   if (!data.imageUrl) {
     throw new Error(data.error || 'No imageUrl in response');

@@ -215,6 +215,8 @@ const MOBILE_COPY = {
     mapboxLoadFailed: 'Mapbox failed to load',
     mapboxTokenMissing: 'Mapbox token missing',
     cloudSyncSlow: 'Cloud sync is taking longer. Local data is available while it continues.',
+    cloudSyncFailed: 'Cloud sync failed. Showing saved data available on this device.',
+    cloudEmpty: 'No saved memories were found in your cloud account.',
     typeLocationFirst: 'Type a location first',
     noMatchingMemory: 'No matching memory',
     currentLocation: 'Current location',
@@ -303,6 +305,8 @@ const MOBILE_COPY = {
     mapboxLoadFailed: 'Mapbox 加载失败',
     mapboxTokenMissing: '缺少 Mapbox token',
     cloudSyncSlow: '云端同步耗时较长，可先继续使用本地内容。',
+    cloudSyncFailed: '云端同步失败，当前仅显示此设备已保存的内容。',
+    cloudEmpty: '云端账号中暂时没有已保存的记忆。',
     typeLocationFirst: '请先输入地点',
     noMatchingMemory: '没有匹配的回忆',
     currentLocation: '当前位置',
@@ -660,7 +664,9 @@ function mobileGenerationErrorMessage(error: unknown, fallback: string, language
       ? '请先登录后再生成 3D 建筑。'
       : 'Please sign in before generating a 3D building.';
   }
-  if (/JIMENG_(?:ACCESS_KEY_ID|SECRET_ACCESS_KEY).*missing|OPENAI_API_KEY.*missing|Gemini API key.*missing/i.test(raw)) {
+  const requestId = raw.match(/request\s*id["':\s]+([a-f0-9-]{12,})/i)?.[1];
+  if (requestId && language === 'zh') return `生图失败，诊断编号：${requestId}`;
+  if (/JIMENG_(?:ACCESS_KEY_ID|SECRET_ACCESS_KEY).*missing|OPENAI_API_KEY.*missing|Gemini API key.*missing|not configured/i.test(raw)) {
     return MOBILE_COPY[language].imageProviderNotConfigured;
   }
   if (raw && language === 'en') return raw;
@@ -3458,6 +3464,7 @@ export function MobileShell() {
   const [memories, setMemories] = useState<MobileMemory[]>(() => restoredMobileMemoriesWithSeeds());
   const [cloudStatus, setCloudStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
   const [cloudSyncSlow, setCloudSyncSlow] = useState(false);
+  const [cloudLoadError, setCloudLoadError] = useState(false);
   const [showAddBuildingModal, setShowAddBuildingModal] = useState(false);
   const [pendingMapPlacement, setPendingMapPlacement] = useState<MobileMapPlacement | null>(null);
   const [mapPlacementNotice, setMapPlacementNotice] = useState<MapPlacementNotice | null>(null);
@@ -3777,6 +3784,7 @@ export function MobileShell() {
       cloudLoadedUserRef.current = null;
       setCloudStatus('idle');
       setCloudSyncSlow(false);
+      setCloudLoadError(false);
       setMemories(restoredMobileMemoriesWithSeeds());
       return;
     }
@@ -3785,7 +3793,9 @@ export function MobileShell() {
     let active = true;
     cloudLoadedUserRef.current = userId;
     setCloudStatus('loading');
+    setMemories(mergeMobileMemories(readStoredMobileMemories()));
     setCloudSyncSlow(false);
+    setCloudLoadError(false);
     const cancelDeadline = scheduleDeadline(() => {
       if (!active) return;
       setCloudSyncSlow(true);
@@ -3793,20 +3803,22 @@ export function MobileShell() {
     }, 15_000);
     void (async () => {
       try {
-        const loaded = await loadAllCloudBuildings(() => nextCloudIdRef.current++);
+        const loaded = await loadAllCloudBuildings(() => nextCloudIdRef.current++, userId);
         if (!active) return;
         const nextMemories = loaded
           .map(mobileMemoryFromCloud)
           .filter((item): item is MobileMemory => Boolean(item));
         const realMemories = mergeMobileMemories(readStoredMobileMemories(), nextMemories);
-        setMemories(realMemories.length ? realMemories : seedMemories);
+        setMemories(realMemories);
         setCloudSyncSlow(false);
+        setCloudLoadError(false);
         setCloudStatus('ready');
       } catch (error) {
         if (!active) return;
         console.error('mobile cloud load failed', error);
-        setMemories(restoredMobileMemoriesWithSeeds());
+        setMemories(mergeMobileMemories(readStoredMobileMemories()));
         setCloudSyncSlow(false);
+        setCloudLoadError(true);
         setCloudStatus('ready');
       } finally {
         cancelDeadline();
@@ -3972,6 +3984,15 @@ export function MobileShell() {
           style={{ color: BRAND_BLUE, fontFamily: MONO_FONT }}
         >
           {MOBILE_COPY[language].cloudSyncSlow}
+        </div>
+      )}
+      {cloudStatus === 'ready' && userId && !cloudSyncSlow && (cloudLoadError || memories.length === 0) && (
+        <div
+          role="status"
+          className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-center text-[12px] shadow-sm"
+          style={{ color: BRAND_BLUE, fontFamily: MONO_FONT }}
+        >
+          {cloudLoadError ? MOBILE_COPY[language].cloudSyncFailed : MOBILE_COPY[language].cloudEmpty}
         </div>
       )}
       {activeTab !== 'setting' && <BottomNav activeTab={activeTab} onChange={setActiveTab} />}

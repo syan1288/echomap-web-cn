@@ -1350,7 +1350,7 @@ const App: React.FC = () => {
     autoLoadedUidRef.current = uid;
     void (async () => {
       try {
-        const loaded = await loadAllCloudBuildings(() => nextId.current++);
+        const loaded = await loadAllCloudBuildings(() => nextId.current++, uid);
         loaded.forEach((img) => {
           if (img.photos[0]?.url) {
             previewImageCache.current[img.id] = new Image();
