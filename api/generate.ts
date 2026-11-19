@@ -878,6 +878,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         mimeType: body.mimeType || 'image/jpeg',
         prompt: stitchedPrompt,
       });
+      providerStage = 'quota-consume';
       const entitlement = await consumeQuotaForSuccess(quotaUserId);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
@@ -902,6 +903,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           providerStage = stage;
         },
       });
+      providerStage = 'quota-consume';
       const entitlement = await consumeQuotaForSuccess(quotaUserId);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
@@ -973,7 +975,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.statusCode = 'error' in extracted ? 500 : 200;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
-    const entitlement = 'error' in extracted ? null : await consumeQuotaForSuccess(quotaUserId);
+    let entitlement: GenerationEntitlement | null = null;
+    if (!('error' in extracted)) {
+      providerStage = 'quota-consume';
+      entitlement = await consumeQuotaForSuccess(quotaUserId);
+    }
     res.end(
       JSON.stringify(
         'error' in extracted
