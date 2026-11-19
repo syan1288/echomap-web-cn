@@ -1,8 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Modality } from '@google/genai';
 import path from 'node:path';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { getAuthenticatedUser, type HeaderLike } from '../server/authUser.js';
 import {
@@ -14,6 +12,7 @@ import {
   describeProviderError,
   getProviderErrorRuntimeInfo,
 } from '../shared/domain/image/providerError.js';
+import { parseGoogleServiceAccountJson } from '../shared/domain/googleServiceAccount.js';
 
 type EchoApiEnv = {
   API_KEY?: string;
@@ -644,13 +643,6 @@ async function requestOpenAIImageEdit(args: {
 }
 
 function applyCredentialsEnv(env: EchoApiEnv) {
-  const json = env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
-  if (json && !env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) {
-    const dir = mkdtempSync(path.join(tmpdir(), 'echo-gcp-'));
-    const p = path.join(dir, 'sa.json');
-    writeFileSync(p, json, 'utf8');
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = p;
-  }
   const cred = env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
   if (cred && !cred.startsWith('{')) {
     process.env.GOOGLE_APPLICATION_CREDENTIALS = path.isAbsolute(cred) ? cred : path.resolve(process.cwd(), cred);
@@ -674,7 +666,14 @@ function createGenAI(env: EchoApiEnv): GoogleGenAI | null {
     return new GoogleGenAI({ apiKey: key });
   }
   if (project) {
-    return new GoogleGenAI({ vertexai: true, project, location, apiVersion: 'v1' });
+    const credentials = parseGoogleServiceAccountJson(env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    return new GoogleGenAI({
+      vertexai: true,
+      project,
+      location,
+      apiVersion: 'v1',
+      ...(credentials ? { googleAuthOptions: { credentials } } : {}),
+    });
   }
   if (key) return new GoogleGenAI({ apiKey: key });
   return null;

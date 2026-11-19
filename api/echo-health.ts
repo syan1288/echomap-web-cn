@@ -2,8 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import { isGeminiProviderAvailable } from '../shared/domain/image/providerAvailability.js';
 import path from 'node:path';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync } from 'node:fs';
+import { parseGoogleServiceAccountJson } from '../shared/domain/googleServiceAccount.js';
 
 type EchoApiEnv = {
   API_KEY?: string;
@@ -87,13 +87,6 @@ function envFromProcess(): EchoApiEnv {
 }
 
 function applyCredentialsEnv(env: EchoApiEnv) {
-  const json = env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
-  if (json && !env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) {
-    const dir = mkdtempSync(path.join(tmpdir(), 'echo-gcp-'));
-    const p = path.join(dir, 'sa.json');
-    writeFileSync(p, json, 'utf8');
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = p;
-  }
   const cred = env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
   if (cred && !cred.startsWith('{')) {
     process.env.GOOGLE_APPLICATION_CREDENTIALS = path.isAbsolute(cred) ? cred : path.resolve(process.cwd(), cred);
@@ -112,7 +105,14 @@ function createGenAI(env: EchoApiEnv): GoogleGenAI | null {
   const project = env.GOOGLE_CLOUD_PROJECT?.trim();
   const location = (env.GOOGLE_CLOUD_LOCATION || 'us-central1').trim();
   if (project) {
-    return new GoogleGenAI({ vertexai: true, project, location, apiVersion: 'v1' });
+    const credentials = parseGoogleServiceAccountJson(env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    return new GoogleGenAI({
+      vertexai: true,
+      project,
+      location,
+      apiVersion: 'v1',
+      ...(credentials ? { googleAuthOptions: { credentials } } : {}),
+    });
   }
   const key = env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim();
   if (key) return new GoogleGenAI({ apiKey: key });
@@ -168,6 +168,10 @@ async function probeGeminiToken(env: EchoApiEnv): Promise<GeminiTokenProbe> {
       const { GoogleAuth } = await import('google-auth-library');
       const auth = new GoogleAuth({
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        ...(() => {
+          const credentials = parseGoogleServiceAccountJson(env.GOOGLE_SERVICE_ACCOUNT_JSON);
+          return credentials ? { credentials } : {};
+        })(),
       });
       const client = await auth.getClient();
       const token = await client.getAccessToken();
