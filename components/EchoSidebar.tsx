@@ -530,15 +530,15 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
         )}
 
         {activeSubmenu === 'style' && (
-          <div className="space-y-1 text-left text-[11px] text-[#111]">
-            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[#777]">
+          <div className="space-y-1 text-left text-[13px] text-[#111]">
+            <div className="px-2 py-1 text-[13px] text-[#777]">
               {language === 'zh' ? '生图风格' : 'Image style'}
             </div>
             {styles.map((style) => (
               <button
                 key={style.id}
                 type="button"
-                className="flex min-h-[30px] w-full items-center gap-2 rounded-[5px] border border-transparent bg-transparent px-2 py-1 text-left text-[11px] text-[#111] transition-colors hover:border-[#1687ff] hover:bg-[#c6ddff]/65"
+                className="flex min-h-[30px] w-full items-center gap-2 rounded-[5px] border border-transparent bg-transparent px-2 py-1 text-left text-[13px] text-[#111] transition-colors hover:border-[#1687ff] hover:bg-[#c6ddff]/65"
                 onClick={() => {
                   setEditingStyle(style);
                   setCreatingStyle(false);
@@ -551,7 +551,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
             ))}
             <button
               type="button"
-              className="mt-1 flex min-h-[30px] w-full items-center gap-2 border-t border-black/10 bg-transparent px-2 pt-2 text-left text-[11px] text-[#0053D4] hover:underline"
+              className="mt-1 flex min-h-[30px] w-full items-center gap-2 border-t border-black/10 bg-transparent px-2 pt-2 text-left text-[13px] text-[#0053D4] hover:underline"
               onClick={() => {
                 setEditingStyle({
                   id: 'custom-draft',
