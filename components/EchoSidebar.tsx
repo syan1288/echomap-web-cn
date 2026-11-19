@@ -8,6 +8,7 @@ import { apiUrl } from '../lib/apiBase';
 import { BuildingStyleEditorModal } from './BuildingStyleEditorModal';
 import { useBuildingStyles } from '../hooks/useBuildingStyles';
 import type { BuildingStyleDefinition } from '../shared/domain/building-style/buildingStyle';
+import { ICON_STROKE_WIDTH } from '../shared/ui/iconTokens';
 
 /** 2.1.1 品牌蓝（echo-map-unified-description.md） */
 const BRAND_BLUE = '#0053D4';
@@ -60,7 +61,7 @@ function defaultAccountName(email: string, phone: string, metadata: Record<strin
 }
 
 const IconLogout: React.FC = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M10 6H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4" />
     <path d="M13 8l5 4-5 4" />
     <path d="M18 12H9" />
@@ -68,14 +69,14 @@ const IconLogout: React.FC = () => (
 );
 
 const IconAccount: React.FC = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <circle cx="12" cy="8.2" r="3.2" />
     <path d="M5.8 18.6c1.4-2.7 3.7-4.1 6.2-4.1s4.8 1.4 6.2 4.1" />
   </svg>
 );
 
 const IconPlan: React.FC = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <rect x="4.2" y="5" width="15.6" height="14" rx="2" />
     <path d="M7.5 9h9" />
     <path d="M7.5 12h4.8" />
@@ -84,7 +85,7 @@ const IconPlan: React.FC = () => (
 );
 
 const IconSparkles: React.FC = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M12 2c1 5 4 8 10 9-6 1-9 4-10 11-1-7-4-10-10-11 6-1 9-4 10-9Z" />
     <path d="M18.5 2.5v2M17.5 3.5h2" />
     <path d="M5.5 17.5v2M4.5 18.5h2" />
@@ -92,20 +93,20 @@ const IconSparkles: React.FC = () => (
 );
 
 const IconStyle: React.FC = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M12 3v18M3 12h18" />
     <path d="m5.6 5.6 12.8 12.8M18.4 5.6 5.6 18.4" />
   </svg>
 );
 
 const IconChevronRight: React.FC = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="m9 18 6-6-6-6" />
   </svg>
 );
 
 const IconEdit: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M12 20h9" />
     <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
   </svg>
@@ -145,7 +146,7 @@ const JimengBrandIcon: React.FC = () => (
 );
 
 const IconSidebarToggle: React.FC<{ collapsed: boolean }> = ({ collapsed }) => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <rect x="4" y="5" width="16" height="14" rx="1.5" />
     <path d="M10 5v14" />
     {collapsed ? <path d="m13 12 3-2.5v5L13 12Z" fill="currentColor" stroke="none" /> : <path d="m11 12 3-2.5v5L11 12Z" fill="currentColor" stroke="none" />}
@@ -153,7 +154,7 @@ const IconSidebarToggle: React.FC<{ collapsed: boolean }> = ({ collapsed }) => (
 );
 
 const IconHomeLine: React.FC = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="m3 10.5 9-7 9 7" />
     <path d="M5.5 9.8v9.2h13V9.8" />
     <path d="M9.4 19v-5.2h5.2V19" />
@@ -161,7 +162,7 @@ const IconHomeLine: React.FC = () => (
 );
 
 const IconGalleryLine: React.FC = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <rect x="4" y="5" width="16" height="14" rx="1.8" />
     <path d="m7.5 15.3 3.2-3.6 2.8 2.9 2.6-3 3.4 3.9" />
     <circle cx="9" cy="9" r="1.2" />
@@ -169,7 +170,7 @@ const IconGalleryLine: React.FC = () => (
 );
 
 const IconAvatarLine: React.FC = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <circle cx="12" cy="8.2" r="3.2" />
     <path d="M5.8 18.6c1.4-2.7 3.7-4.1 6.2-4.1s4.8 1.4 6.2 4.1" />
   </svg>

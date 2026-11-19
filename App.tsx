@@ -57,6 +57,7 @@ import {
   createRasterFallbackStyle,
 } from './lib/mapboxAdapter';
 import { loadMapbox } from './lib/mapboxLoader';
+import { ICON_STROKE_WIDTH } from './shared/ui/iconTokens';
 
 /** 侧栏地理文案：Roboto 作为 Google Sans 的可加载替代 */
 const FONT_GOOGLE_SANS = '"Roboto", "Google Sans", system-ui, sans-serif';
@@ -2114,7 +2115,7 @@ const App: React.FC = () => {
               style={{ borderWidth: MAP_ICON_BORDER_PX }}
               aria-label="Change basemap theme"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <circle cx="13.5" cy="6.5" r=".5" />
                 <circle cx="17.5" cy="10.5" r=".5" />
                 <circle cx="8.5" cy="7.5" r=".5" />
@@ -2158,7 +2159,7 @@ const App: React.FC = () => {
             style={{ borderWidth: MAP_ICON_BORDER_PX }}
             aria-label="Back to my location"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M12 21c4.6-4.1 7-7.4 7-10.2A7 7 0 1 0 5 10.8C5 13.6 7.4 16.9 12 21Z" />
               <circle cx="12" cy="10" r="2.5" />
             </svg>
@@ -2214,7 +2215,7 @@ const App: React.FC = () => {
                 mapRef.current?.zoomIn();
               }}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M12 5v14" />
                 <path d="M5 12h14" />
               </svg>
@@ -2230,7 +2231,7 @@ const App: React.FC = () => {
                 mapRef.current?.zoomOut();
               }}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M5 12h14" />
               </svg>
             </button>
