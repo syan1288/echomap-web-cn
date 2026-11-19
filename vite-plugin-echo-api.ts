@@ -18,6 +18,9 @@ import { handleWechatPayNotify } from './server/wechatPayNotify';
 import { handleSupabaseSendSmsHook } from './server/supabaseSmsHook';
 import { isGeminiProviderAvailable } from './shared/domain/image/providerAvailability';
 import { describeProviderError } from './shared/domain/image/providerError';
+import { buildJimengPrompt } from './shared/domain/image/jimengPrompt';
+import { DEFAULT_BUILDING_STYLE_PROMPTS } from './shared/domain/building-style/buildingStyle';
+import { uploadJimengInputFromBase64 } from './server/jimengImageInput';
 import {
   consumeGenerationEntitlement,
   getGenerationEntitlement,
@@ -61,6 +64,7 @@ export interface EchoApiEnv {
   ECHO_PREFER_API_KEY?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
   VITE_SUPABASE_URL?: string;
   VITE_SUPABASE_ANON_KEY?: string;
   ECHO_GENERATION_QUOTA_ENABLED?: string;
@@ -524,6 +528,25 @@ function buildVolcRequestUrl(baseUrl: string, canonicalQuery: string): { url: st
   };
 }
 
+async function fetchJimengWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs = 20_000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Jimeng upstream request timed out');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function resolveJimengConfig(env: EchoApiEnv) {
   const accessKeyId = env.JIMENG_ACCESS_KEY_ID?.trim() || '';
   const secretAccessKey = env.JIMENG_SECRET_ACCESS_KEY?.trim() || '';
@@ -567,7 +590,9 @@ async function requestJimengImageEdit(args: {
   const submitBody = {
     req_key: conf.reqKey,
     image_urls: args.imageUrls.slice(0, 14),
-    prompt: args.prompt,
+    prompt: args.prompt.slice(0, 800),
+    force_single: true,
+    size: conf.size,
     scale: conf.scale,
   };
   const submitText = JSON.stringify(submitBody);
@@ -585,7 +610,7 @@ async function requestJimengImageEdit(args: {
     service: conf.service,
     xDate: submitXDate,
   });
-  const submitResponse = await fetch(submitRequest.url, {
+  const submitResponse = await fetchJimengWithTimeout(submitRequest.url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -609,7 +634,12 @@ async function requestJimengImageEdit(args: {
     const msg = [apiMsg, raw ? `raw=${raw}` : null]
       .filter(Boolean)
       .join(' | ');
-    throw new Error(msg || `Jimeng submit failed (${submitResponse.status})`);
+    const error = new Error(msg || `Jimeng submit failed (${submitResponse.status})`);
+    Object.assign(error, {
+      status: submitResponse.status,
+      code: submitOut?.code ?? null,
+    });
+    throw error;
   }
 
   const taskId = submitOut.data.task_id;
@@ -642,7 +672,7 @@ async function requestJimengImageEdit(args: {
       service: conf.service,
       xDate: resultXDate,
     });
-    const resultResponse = await fetch(resultRequest.url, {
+    const resultResponse = await fetchJimengWithTimeout(resultRequest.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -670,7 +700,12 @@ async function requestJimengImageEdit(args: {
       const msg = [apiMsg, raw ? `raw=${raw}` : null]
         .filter(Boolean)
         .join(' | ');
-      throw new Error(msg || `Jimeng result failed (${resultResponse.status})`);
+      const error = new Error(msg || `Jimeng result failed (${resultResponse.status})`);
+      Object.assign(error, {
+        status: resultResponse.status,
+        code: resultOut?.code ?? null,
+      });
+      throw error;
     }
     const status = resultOut.data?.status;
     if (status === 'in_queue' || status === 'generating') {
@@ -1353,6 +1388,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             userPrompt?: string;
             /** flat | pixel | ink | healing */
             buildingStyle?: string;
+            stylePrompt?: string;
             /** gemini | jimeng | chatgpt-image */
             preferredModel?: 'gemini' | 'jimeng' | 'chatgpt-image';
           };
@@ -1464,10 +1500,20 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             return;
           }
           if (wantsJimeng) {
+            const serverImageUrl = await uploadJimengInputFromBase64({
+              env,
+              imageBase64: body.imageBase64,
+              mimeType: body.mimeType,
+            });
             const jimeng = await requestJimengImageEdit({
               env,
-              imageUrls: body.imageUrls ?? [],
-              prompt: stitchedPrompt,
+              imageUrls: serverImageUrl ? [serverImageUrl] : body.imageUrls ?? [],
+              prompt: buildJimengPrompt({
+                buildingName: body.buildingName,
+                stylePrompt:
+                  body.stylePrompt || DEFAULT_BUILDING_STYLE_PROMPTS[buildingStyle],
+                userPrompt: body.userPrompt,
+              }),
             });
             const ms = Date.now() - t0;
             logLine('generate_ok', { reqId, ms, model: jimeng.model, backend: 'jimeng' });

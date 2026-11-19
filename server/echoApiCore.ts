@@ -11,6 +11,10 @@ import {
   DEFAULT_BUILDING_STYLE,
   isBuildingStyleId,
 } from '../prompts/buildingStyle.js';
+import {
+  DEFAULT_BUILDING_STYLE_PROMPTS,
+  MAX_STYLE_PROMPT_LENGTH,
+} from '../shared/domain/building-style/buildingStyle.js';
 
 export type EchoApiEnv = {
   GEMINI_API_KEY?: string;
@@ -357,6 +361,7 @@ export async function handleGenerate(
     buildingName?: string;
     userPrompt?: string;
     buildingStyle?: string;
+    stylePrompt?: string;
   };
   try {
     body = (typeof input === 'object' ? input : JSON.parse(rawBody)) as typeof body;
@@ -366,6 +371,18 @@ export async function handleGenerate(
 
   if (!body.imageBase64) {
     return { status: 400, json: { error: 'imageBase64 required' } };
+  }
+  if (body.stylePrompt != null && typeof body.stylePrompt !== 'string') {
+    return { status: 400, json: { error: 'stylePrompt must be a string', code: 'STYLE_PROMPT_INVALID' } };
+  }
+  if (body.stylePrompt && body.stylePrompt.trim().length > MAX_STYLE_PROMPT_LENGTH) {
+    return {
+      status: 400,
+      json: {
+        error: `stylePrompt is too long (maximum ${MAX_STYLE_PROMPT_LENGTH} characters)`,
+        code: 'STYLE_PROMPT_TOO_LONG',
+      },
+    };
   }
 
   const ai = getAi(env);
@@ -380,10 +397,11 @@ export async function handleGenerate(
     };
   }
 
-  const userText = body.userPrompt?.trim()
-    ? buildEditUserPrompt(body.userPrompt, body.buildingName)
-    : buildInitialUserPrompt(body.buildingName);
   const buildingStyle = isBuildingStyleId(body.buildingStyle) ? body.buildingStyle : DEFAULT_BUILDING_STYLE;
+  const stylePrompt = body.stylePrompt?.trim() || DEFAULT_BUILDING_STYLE_PROMPTS[buildingStyle];
+  const userText = body.userPrompt?.trim()
+    ? `${buildEditUserPrompt(body.userPrompt, body.buildingName)} 风格要求：${stylePrompt}`
+    : `${buildInitialUserPrompt(body.buildingName)} 风格要求：${stylePrompt}`;
   const systemInstruction = buildEchoImageSystemInstruction(buildingStyle);
 
   try {

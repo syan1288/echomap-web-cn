@@ -2,10 +2,10 @@ import React, { useCallback, useRef, useState } from 'react';
 import { useLocalization } from '../context/LocalizationContext';
 import { assertFileSizeOk } from '../shared/domain/uploads/uploadLimits';
 import {
-  BUILDING_STYLE_OPTIONS,
   DEFAULT_BUILDING_STYLE,
   type BuildingStyleId,
 } from '../shared/domain/building-style/buildingStyle';
+import { useBuildingStyles } from '../hooks/useBuildingStyles';
 import { isNativeApp, pickImageAsFile } from '../lib/mobile';
 
 const STYLE_I18N_KEY: Record<BuildingStyleId, string> = {
@@ -24,16 +24,17 @@ type ModalStep = 'method' | 'review';
 export interface AddBuildingModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (file: File, buildingName: string, buildingStyle: BuildingStyleId) => void;
+  onSave: (file: File, buildingName: string, buildingStyle: string, stylePrompt: string) => void;
 }
 
 export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClose, onSave }) => {
   const { t } = useLocalization();
+  const { styles } = useBuildingStyles();
   const [step, setStep] = useState<ModalStep>('method');
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [buildingName, setBuildingName] = useState('');
-  const [buildingStyle, setBuildingStyle] = useState<BuildingStyleId>(DEFAULT_BUILDING_STYLE);
+  const [buildingStyle, setBuildingStyle] = useState<string>(DEFAULT_BUILDING_STYLE);
   const [sizeError, setSizeError] = useState<string | null>(null);
   const localInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -219,9 +220,11 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
                   onChange={(e) => setBuildingStyle(e.target.value as BuildingStyleId)}
                   aria-label={t('buildingStyleLabel')}
                 >
-                  {BUILDING_STYLE_OPTIONS.map(({ id }) => (
-                    <option key={id} value={id}>
-                      {t(STYLE_I18N_KEY[id])}
+                  {styles.map((style) => (
+                    <option key={style.id} value={style.id}>
+                      {style.builtin && style.id in STYLE_I18N_KEY
+                        ? t(STYLE_I18N_KEY[style.id as keyof typeof STYLE_I18N_KEY])
+                        : style.name}
                     </option>
                   ))}
                 </select>
@@ -241,7 +244,8 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
               disabled={!canSave}
               onClick={() => {
                 if (!file || !buildingName.trim()) return;
-                onSave(file, buildingName.trim(), buildingStyle);
+                const selectedStyle = styles.find((style) => style.id === buildingStyle) ?? styles[0];
+                onSave(file, buildingName.trim(), selectedStyle.id, selectedStyle.prompt);
                 reset();
                 onClose();
               }}

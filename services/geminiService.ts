@@ -3,7 +3,7 @@ import { apiUrl } from '../lib/apiBase';
 import { supabase } from '../lib/supabaseClient';
 import type { BuildingStyleId } from '../shared/domain/building-style/buildingStyle';
 import { uploadImageAndCreateJimengUrl } from './jimengInputUpload';
-export type PreferredImageModel = 'gemini' | 'jimeng' | 'chatgpt-image';
+export type PreferredImageModel = 'gemini' | 'jimeng';
 
 /** 与后端 POST 路径一致；本地由 Vite 插件提供，生产由 VITE_API_BASE_URL 指向的服务提供 */
 function generateEndpoint(): string {
@@ -79,8 +79,11 @@ export interface GenerateImageOptions {
   /** 编辑/重混时的自然语言指令（与 buildingName 可同时存在） */
   userPrompt?: string;
   /** 与 AddBuildingModal 一致，决定 Vertex systemInstruction 风格 */
-  buildingStyle?: BuildingStyleId;
-  /** 预留给多模型路由：gemini | 即梦 | chatgpt-image */
+  buildingStyle?: BuildingStyleId | string;
+  /** 用户在设置中保存的可编辑风格规则 */
+  stylePrompt?: string;
+  styleName?: string;
+  /** 预留给多模型路由：gemini | 即梦 */
   preferredModel?: PreferredImageModel;
 }
 
@@ -141,6 +144,8 @@ export const generateImageWithPrompt = async (
       buildingName: options.buildingName?.trim() || undefined,
       userPrompt: options.userPrompt?.trim() || undefined,
       buildingStyle: options.buildingStyle || undefined,
+      styleName: options.styleName?.trim() || undefined,
+      stylePrompt: options.stylePrompt?.trim() || undefined,
       preferredModel: options.preferredModel || undefined,
     }),
   });

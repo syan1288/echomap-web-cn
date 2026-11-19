@@ -1,6 +1,6 @@
 import { apiUrl } from '../lib/apiBase';
 
-export type ImageProvider = 'gemini' | 'jimeng' | 'chatgpt-image';
+export type ImageProvider = 'gemini' | 'jimeng';
 export type ImageProviderAvailability = Partial<Record<ImageProvider, boolean>>;
 
 export async function fetchImageProviderAvailability(): Promise<ImageProviderAvailability | null> {
@@ -22,7 +22,6 @@ export async function fetchImageProviderAvailability(): Promise<ImageProviderAva
         health.providers?.gemini ??
         Boolean(health.env?.hasGeminiApiKey || (health.env?.hasGoogleCloudProject && health.env?.hasGoogleApplicationCredentials)),
       jimeng: health.providers?.jimeng ?? Boolean(health.env?.hasJimengKeys),
-      'chatgpt-image': health.providers?.['chatgpt-image'] ?? Boolean(health.env?.hasOpenAiKey),
     };
   } catch {
     return null;

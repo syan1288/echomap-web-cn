@@ -32,6 +32,7 @@ import { GalleryDetailModals } from '../../components/GalleryDetailModals';
 import { HelpModal } from '../../components/HelpModal';
 import { VersionPlanModal } from '../../components/VersionPlanModal';
 import { AddBuildingModal } from '../../components/AddBuildingModal';
+import { BuildingStyleEditorModal } from '../../components/BuildingStyleEditorModal';
 import { MoonFaceAvatar } from '../../components/MoonFaceAvatar';
 import { EchoSidebarBrandIllustration } from '../../components/EchoSidebarBrandIllustration';
 import { SidebarNoiseCanvas } from '../../components/SidebarNoiseCanvas';
@@ -57,15 +58,16 @@ import { assertFileSizeOk } from '../../shared/domain/uploads/uploadLimits';
 import { buildGeocodeQueries, shouldGeocodeBuildingName } from '../../shared/domain/geo/geoFromBuildingName';
 import { continentKeyFromLatLng } from '../../shared/domain/geo/geoStats';
 import { parseReverseGeocodePlace, parseSearchSuggestions, type SearchSuggestion } from '../../shared/domain/geo/locationParsers';
-import { DEFAULT_BUILDING_STYLE, type BuildingStyleId } from '../../shared/domain/building-style/buildingStyle';
+import { DEFAULT_BUILDING_STYLE, type BuildingStyleDefinition, type BuildingStyleId } from '../../shared/domain/building-style/buildingStyle';
+import { useBuildingStyles } from '../../hooks/useBuildingStyles';
 import { clampGalleryPage, paginateGalleryItems } from '../../shared/domain/galleryPagination';
 import type { AudioEntry, LogData, PhotoData, ProcessedImage } from '../../web/app/webMemoryTypes';
 import './MobileShell.css';
 
 type MobileTab = 'home' | 'map' | 'gallery' | 'setting';
 type LoginMode = 'intro' | 'signup' | 'signin';
-type MobileModelId = 'jimeng' | 'gemini' | 'chat-image-2';
-type SettingSubview = 'main' | 'account' | 'privacy';
+type MobileModelId = 'jimeng' | 'gemini';
+type SettingSubview = 'main' | 'account' | 'privacy' | 'styles';
 type ProfileEditField = 'name' | 'phone' | 'email';
 type PermissionKind = 'notifications' | 'camera' | 'photos' | 'microphone' | 'files' | 'bluetooth';
 type MobileMapPlacement = { lat: number; lng: number; location?: string };
@@ -86,6 +88,7 @@ type MobileMemory = {
   log?: LogData;
   deleted?: boolean;
   buildingStyle?: BuildingStyleId;
+  stylePrompt?: string;
   isGenerating?: boolean;
   generationError?: string;
   defaultUnlocked?: boolean;
@@ -147,7 +150,6 @@ const PLACE_LABELS: Record<string, { en: string; zh: string }> = {
 const MOBILE_MODEL_OPTIONS: Array<{ id: MobileModelId; label: string }> = [
   { id: 'jimeng', label: '即梦' },
   { id: 'gemini', label: 'Gemini' },
-  { id: 'chat-image-2', label: 'ChatGPT-image-2.0' },
 ];
 const MOBILE_MODEL_STORAGE_KEY = 'echomap-mobile-image-model';
 const MOBILE_MEMORIES_STORAGE_KEY = 'echomap-mobile-memories-v1';
@@ -167,7 +169,7 @@ function mapBuildingZoomScale(zoom: number): number {
 }
 
 function isMobileModelId(value: string | null | undefined): value is MobileModelId {
-  return value === 'jimeng' || value === 'gemini' || value === 'chat-image-2';
+  return value === 'jimeng' || value === 'gemini';
 }
 
 function readStoredMobileModel(): MobileModelId {
@@ -177,7 +179,7 @@ function readStoredMobileModel(): MobileModelId {
 }
 
 function preferredImageModelFromMobileModel(model: MobileModelId): PreferredImageModel {
-  return model === 'chat-image-2' ? 'chatgpt-image' : model;
+  return model;
 }
 
 const mobileSynth = new Tone.Synth({
@@ -423,7 +425,6 @@ const OpenAIBrandIcon: React.FC<{ size?: number }> = ({ size = 24 }) => (
 
 const MobileModelIcon: React.FC<{ model: MobileModelId; size?: number }> = ({ model, size = 24 }) => {
   if (model === 'gemini') return <GeminiBrandIcon size={size} />;
-  if (model === 'chat-image-2') return <OpenAIBrandIcon size={size} />;
   return <JimengBrandIcon size={size} />;
 };
 
@@ -2959,6 +2960,7 @@ function SettingPage({
 }) {
   const { user, signOut } = useAuth();
   const { language, toggleLanguage } = useLocalization();
+  const { styles, update, create, remove } = useBuildingStyles();
   const accountEmail = user?.email?.trim() ?? '';
   const accountPhone = user?.phone?.trim()
     || metadataString(user?.user_metadata?.phone)
@@ -2975,6 +2977,8 @@ function SettingPage({
   const [permissionHint, setPermissionHint] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
   const [subview, setSubview] = useState<SettingSubview>('main');
+  const [editingStyle, setEditingStyle] = useState<BuildingStyleDefinition | null>(null);
+  const [creatingStyle, setCreatingStyle] = useState(false);
   const [accountName, setAccountName] = useState(() => {
     if (typeof window === 'undefined') return defaultAccountName(profileIdentifier);
     return window.localStorage.getItem(`${profileStorageKey}:name`) || defaultAccountName(profileIdentifier);
@@ -3012,7 +3016,7 @@ function SettingPage({
     ],
     [copy],
   );
-  const sheetTitle = subview === 'account' ? copy.editProfile : subview === 'privacy' ? copy.privacyTitle : copy.settings;
+  const sheetTitle = subview === 'account' ? copy.editProfile : subview === 'privacy' ? copy.privacyTitle : subview === 'styles' ? '生图风格' : copy.settings;
 
   useEffect(() => {
     setDraftAccountName(accountName);
@@ -3176,7 +3180,42 @@ function SettingPage({
           {sheetTitle}
         </h2>
 
-        {subview === 'account' ? (
+        {subview === 'styles' ? (
+          <div className="mt-8 space-y-3" style={{ fontFamily: MONO_FONT }}>
+            {styles.map((style) => (
+              <button
+                key={style.id}
+                type="button"
+                className="echo-setting-row"
+                onClick={() => {
+                  setCreatingStyle(false);
+                  setEditingStyle(style);
+                }}
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-current" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-left text-[14px] font-bold text-current">{style.name}</span>
+                <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="echo-setting-row"
+              onClick={() => {
+                setEditingStyle({
+                  id: `custom-${Date.now()}`,
+                  name: 'Custom style',
+                  prompt: styles.find((style) => style.id === DEFAULT_BUILDING_STYLE)?.prompt || '',
+                  builtin: false,
+                });
+                setCreatingStyle(true);
+              }}
+            >
+              <span className="h-2.5 w-2.5 rounded-full border border-current" aria-hidden />
+              <span className="min-w-0 flex-1 text-left text-[14px] font-bold text-current">新建自定义风格</span>
+              <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
+            </button>
+          </div>
+        ) : subview === 'account' ? (
           <div className="mt-16">
             <div className="relative mx-auto h-[76px] w-[76px]">
               <div className="echo-settings-avatar echo-profile-avatar flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-white text-black">
@@ -3362,6 +3401,12 @@ function SettingPage({
                 <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
               </button>
 
+              <button type="button" className="echo-setting-row" aria-label="生图风格" onClick={() => setSubview('styles')}>
+                <span className="echo-setting-icon echo-setting-icon-pure"><EchoSparklesIcon strokeWidth={1.5} /></span>
+                <span className="min-w-0 flex-1 text-left text-[14px] font-bold tracking-[0.02em] text-[#666]">生图风格</span>
+                <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
+              </button>
+
               <div className="overflow-visible rounded-[16px] bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
                 <button type="button" className="echo-setting-row rounded-b-none shadow-none" onClick={toggleLanguage} aria-label={copy.language}>
                   <span className="echo-setting-icon echo-setting-icon-pure"><IconLanguage size={22} /></span>
@@ -3387,7 +3432,7 @@ function SettingPage({
                   </button>
                   {modelMenuOpen && (
                     <div
-                      className="absolute right-0 top-[calc(100%+0.35rem)] z-50 w-[216px] max-w-[calc(100vw-4rem)] rounded-[8px] border border-black/10 bg-white px-1.5 py-1.5 shadow-[0_6px_16px_rgba(0,0,0,0.12)]"
+                      className="absolute right-0 top-[calc(100%+0.35rem)] z-50 w-[280px] max-w-[calc(100vw-2rem)] rounded-[8px] border border-black/10 bg-white px-1.5 py-1.5 shadow-[0_6px_16px_rgba(0,0,0,0.12)]"
                       style={{ fontFamily: MONO_FONT }}
                     >
                       {MOBILE_MODEL_OPTIONS.map((option) => (
@@ -3396,7 +3441,7 @@ function SettingPage({
                           type="button"
                           disabled={
                             imageProviderAvailability?.[
-                              option.id === 'chat-image-2' ? 'chatgpt-image' : option.id
+                              option.id
                             ] === false
                           }
                           className="flex min-h-[44px] w-full items-center gap-3 rounded-[6px] border-0 bg-transparent px-3 py-2 text-left text-[14px] font-bold tracking-[0.02em] hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3411,9 +3456,9 @@ function SettingPage({
                           </span>
                           <span className="min-w-0 flex-1 truncate">{option.label}</span>
                           {imageProviderAvailability?.[
-                            option.id === 'chat-image-2' ? 'chatgpt-image' : option.id
+                            option.id
                           ] === false && (
-                            <span className="shrink-0 text-[10px] font-normal">
+                            <span className="max-w-[78px] shrink-0 text-right text-[10px] font-normal leading-tight whitespace-normal">
                               {copy.providerNotConfigured}
                             </span>
                           )}
@@ -3460,6 +3505,31 @@ function SettingPage({
           <VersionPlanModal title={copy.versionPlan} onClose={() => setVersionPlanModalOpen(false)} />
         </div>
       )}
+      <BuildingStyleEditorModal
+        open={Boolean(editingStyle)}
+        style={editingStyle}
+        onCancel={() => {
+          setEditingStyle(null);
+          setCreatingStyle(false);
+        }}
+        onSave={(name, prompt) => {
+          if (!editingStyle) return;
+          if (creatingStyle) {
+            create(name, prompt);
+          } else {
+            update({ ...editingStyle, name, prompt });
+          }
+          setEditingStyle(null);
+          setCreatingStyle(false);
+        }}
+        onDelete={() => {
+          if (!editingStyle || creatingStyle) return;
+          if (window.confirm('删除这个自定义风格？')) {
+            remove(editingStyle.id);
+            setEditingStyle(null);
+          }
+        }}
+      />
     </section>
   );
 }
@@ -3500,12 +3570,11 @@ export function MobileShell() {
 
   useEffect(() => {
     if (!imageProviderAvailability) return;
-    const selectedProvider = selectedModel === 'chat-image-2' ? 'chatgpt-image' : selectedModel;
+    const selectedProvider = selectedModel;
     if (imageProviderAvailability[selectedProvider] !== false) return;
-    const fallback = (['gemini', 'jimeng', 'chat-image-2'] as const).find((model) => {
-      const provider = model === 'chat-image-2' ? 'chatgpt-image' : model;
-      return imageProviderAvailability[provider] === true;
-    });
+    const fallback = (['gemini', 'jimeng'] as const).find(
+      (model) => imageProviderAvailability[model] === true
+    );
     if (fallback) setSelectedModel(fallback);
   }, [imageProviderAvailability, selectedModel]);
 
@@ -3513,6 +3582,7 @@ export function MobileShell() {
     file: File | null,
     buildingName: string,
     buildingStyle: BuildingStyleId,
+    stylePrompt: string,
     placement: MobileMapPlacement | null,
   ) => {
     if (!file) return;
@@ -3551,6 +3621,7 @@ export function MobileShell() {
       photos: [photo],
       audioEntries: [],
       buildingStyle,
+      stylePrompt,
       isGenerating: true,
       generationError: undefined,
       defaultUnlocked: true,
@@ -3610,7 +3681,7 @@ export function MobileShell() {
     try {
       const preferredModel = preferredImageModelFromMobileModel(selectedModel);
       console.info('Mobile building generation started', { preferredModel, buildingStyle, buildingName: name });
-      const { imageUrl } = await generateImageWithPrompt(file, { buildingName: name, buildingStyle, preferredModel });
+      const { imageUrl } = await generateImageWithPrompt(file, { buildingName: name, buildingStyle, stylePrompt, preferredModel });
       if (!imageUrl) throw new Error('Generation failed, no image returned.');
       const processed = await processMobileImageForTransparency(imageUrl);
       setMemories((current) =>
@@ -3662,6 +3733,7 @@ export function MobileShell() {
       const { imageUrl } = await generateImageWithPrompt(photo.file, {
         buildingName,
         buildingStyle,
+        stylePrompt: memory.stylePrompt,
         preferredModel,
         userPrompt: userPrompt?.trim() || undefined,
       });
@@ -3916,7 +3988,7 @@ export function MobileShell() {
         onChange={(event) => {
           const file = event.target.files?.[0] ?? null;
           event.target.value = '';
-          void createMobileBuilding(file, '', DEFAULT_BUILDING_STYLE, pendingMapPlacement);
+          void createMobileBuilding(file, '', DEFAULT_BUILDING_STYLE, '', pendingMapPlacement);
         }}
       />
       {mountedTabs.has('home') && (
@@ -3974,9 +4046,9 @@ export function MobileShell() {
           setShowAddBuildingModal(false);
           setPendingMapPlacement(null);
         }}
-        onSave={(file, buildingName, buildingStyle) => {
+        onSave={(file, buildingName, buildingStyle, stylePrompt) => {
           setShowAddBuildingModal(false);
-          void createMobileBuilding(file, buildingName, buildingStyle, pendingMapPlacement);
+          void createMobileBuilding(file, buildingName, buildingStyle as BuildingStyleId, stylePrompt, pendingMapPlacement);
           setPendingMapPlacement(null);
         }}
       />

@@ -15,7 +15,7 @@ const PANEL_STACK = `
   ${PANEL_BG}
 `;
 
-type ImageProvider = 'jimeng' | 'gemini' | 'chatgpt-image';
+type ImageProvider = 'jimeng' | 'gemini';
 type AvatarSubmenu = 'account' | 'version' | 'model' | null;
 type PaidPlanId = 'plus' | 'pro';
 
@@ -31,7 +31,6 @@ type PaymentOrder = {
 const MODEL_OPTIONS = [
   { id: 'jimeng', label: '即梦' },
   { id: 'gemini', label: 'Gemini' },
-  { id: 'chatgpt-image', label: 'ChatGPT-image-2.0' },
 ] as const;
 
 const MONO_FONT = '"Roboto Mono", ui-monospace, monospace';
@@ -439,7 +438,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
 
     const modelIcon = (id: ImageProvider) => {
       if (id === 'gemini') return <GeminiBrandIcon />;
-      if (id === 'chatgpt-image') return <OpenAIBrandIcon />;
       return <JimengBrandIcon />;
     };
     const planRows = [

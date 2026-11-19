@@ -380,7 +380,8 @@ const App: React.FC = () => {
   const [placementInfo, setPlacementInfo] = useState<{
     file: File;
     buildingName?: string;
-    buildingStyle?: BuildingStyleId;
+    buildingStyle?: string;
+    stylePrompt?: string;
   } | null>(null);
   const [mapExplored, setMapExplored] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -499,7 +500,6 @@ const App: React.FC = () => {
           providers?: Partial<Record<ImageProvider, boolean>>;
           env?: {
             hasGeminiApiKey?: boolean;
-            hasOpenAiKey?: boolean;
             hasJimengKeys?: boolean;
             hasGoogleCloudProject?: boolean;
             hasGoogleApplicationCredentials?: boolean;
@@ -509,7 +509,6 @@ const App: React.FC = () => {
           gemini:
             j.providers?.gemini ??
             Boolean(j.env?.hasGeminiApiKey || (j.env?.hasGoogleCloudProject && j.env?.hasGoogleApplicationCredentials)),
-          'chatgpt-image': j.providers?.['chatgpt-image'] ?? Boolean(j.env?.hasOpenAiKey),
           jimeng: j.providers?.jimeng ?? Boolean(j.env?.hasJimengKeys),
         };
         setImageProviderAvailability(inferredProviders);
@@ -535,7 +534,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!imageProviderAvailability) return;
     if (imageProviderAvailability[imageProvider] !== false) return;
-    const fallback = (['jimeng', 'gemini', 'chatgpt-image'] as const).find(
+    const fallback = (['jimeng', 'gemini'] as const).find(
       (provider) => imageProviderAvailability[provider]
     );
     if (fallback && fallback !== imageProvider) {
@@ -821,13 +820,14 @@ const App: React.FC = () => {
   const generateFromImage = useCallback(async (
     file: File,
     id: number,
-    options?: { buildingName?: string; userPrompt?: string; buildingStyle?: BuildingStyleId; preferredModel?: ImageProvider }
+    options?: { buildingName?: string; userPrompt?: string; buildingStyle?: string; stylePrompt?: string; preferredModel?: ImageProvider }
   ) => {
     try {
       const { imageUrl } = await generateImageWithPrompt(file, {
         buildingName: options?.buildingName,
         userPrompt: options?.userPrompt,
         buildingStyle: options?.buildingStyle,
+        stylePrompt: options?.stylePrompt,
         preferredModel: options?.preferredModel ?? imageProvider,
       });
       if (!imageUrl) throw new Error("Generation failed, no image returned.");
@@ -847,7 +847,10 @@ const App: React.FC = () => {
           width: newWidth,
           height: newHeight,
           isGenerating: false,
-          buildingStyle: options?.buildingStyle ?? img.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+          buildingStyle: isBuildingStyleId(options?.buildingStyle)
+            ? options.buildingStyle
+            : img.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+          stylePrompt: options?.stylePrompt ?? img.stylePrompt,
         }
       }));
     } catch (e) {
@@ -874,7 +877,7 @@ const App: React.FC = () => {
   const addImageAtLatLng = useCallback((
     file: File,
     latlng: { lat: number; lng: number },
-    logInfo: { location: string; date: string; buildingNameHint?: string; buildingStyle?: BuildingStyleId }
+    logInfo: { location: string; date: string; buildingNameHint?: string; buildingStyle?: BuildingStyleId; stylePrompt?: string }
   ) => {
     (async () => {
         await ensureAudioContext();
@@ -896,6 +899,7 @@ const App: React.FC = () => {
         contentBounds: { x: 0, y: 0, width: PLACEHOLDER_WIDTH, height: PLACEHOLDER_WIDTH },
         flippedHorizontally: false, isLocked: false,
         buildingStyle: style,
+        stylePrompt: logInfo.stylePrompt,
         photos: [
           {
             file,
@@ -917,12 +921,12 @@ const App: React.FC = () => {
         }
     };
     setImages(prev => [...prev, newImage]);
-    generateFromImage(file, id, { buildingName: logInfo.buildingNameHint, buildingStyle: style });
+    generateFromImage(file, id, { buildingName: logInfo.buildingNameHint, buildingStyle: style, stylePrompt: logInfo.stylePrompt });
     return id;
   }, [generateFromImage]);
   
   const startImagePlacement = useCallback(
-    async (file: File, opts?: { buildingName?: string; buildingStyle?: BuildingStyleId }) => {
+    async (file: File, opts?: { buildingName?: string; buildingStyle?: string; stylePrompt?: string }) => {
       if (!mapState.isReady || !mapRef.current) {
         setToastMessage(t('toastMapNotReady'));
         return;
@@ -948,19 +952,20 @@ const App: React.FC = () => {
           location: locationName,
           date: exifData.date,
           buildingNameHint: opts?.buildingName?.trim(),
-          buildingStyle: opts?.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+          buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE,
+          stylePrompt: opts?.stylePrompt,
         });
         return;
       }
 
       const name = opts?.buildingName?.trim();
       if (!name) {
-        setPlacementInfo({ file, buildingStyle: opts?.buildingStyle ?? DEFAULT_BUILDING_STYLE });
+        setPlacementInfo({ file, buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE, stylePrompt: opts?.stylePrompt });
         return;
       }
 
       if (!shouldGeocodeBuildingName(name)) {
-        setPlacementInfo({ file, buildingName: name, buildingStyle: opts?.buildingStyle ?? DEFAULT_BUILDING_STYLE });
+        setPlacementInfo({ file, buildingName: name, buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE, stylePrompt: opts?.stylePrompt });
         setToastMessage(t('toastPlacementNoGeoHint'));
         return;
       }
@@ -994,7 +999,8 @@ const App: React.FC = () => {
               location: locationName,
               date,
               buildingNameHint: name,
-              buildingStyle: opts?.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+              buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE,
+              stylePrompt: opts?.stylePrompt,
             });
             return;
           }
@@ -1003,7 +1009,7 @@ const App: React.FC = () => {
         }
       }
 
-      setPlacementInfo({ file, buildingName: name, buildingStyle: opts?.buildingStyle ?? DEFAULT_BUILDING_STYLE });
+      setPlacementInfo({ file, buildingName: name, buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE, stylePrompt: opts?.stylePrompt });
       setToastMessage(t('toastGeocodeFailedManual'));
     },
     [addImageAtLatLng, language, mapState.isReady, t]
@@ -1027,7 +1033,10 @@ const App: React.FC = () => {
           date,
           location: t('loadingLocation'),
           buildingNameHint: placementInfo.buildingName,
-          buildingStyle: placementInfo.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+          buildingStyle: isBuildingStyleId(placementInfo.buildingStyle)
+            ? placementInfo.buildingStyle
+            : DEFAULT_BUILDING_STYLE,
+          stylePrompt: placementInfo.stylePrompt,
         });
 
         // Geocode and update name later
@@ -1449,6 +1458,7 @@ const App: React.FC = () => {
           generateFromImage(selectedImage.sourceFile, selectedImage.id, {
             buildingName,
             buildingStyle: selectedImage.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+            stylePrompt: selectedImage.stylePrompt,
           });
       }
   };
@@ -1466,6 +1476,7 @@ const App: React.FC = () => {
       userPrompt: finalPrompt,
       buildingName,
       buildingStyle: selectedImage.buildingStyle ?? DEFAULT_BUILDING_STYLE,
+      stylePrompt: selectedImage.stylePrompt,
     });
   };
 
@@ -2024,8 +2035,8 @@ const App: React.FC = () => {
   }, [showResetConfirm, showImportConfirm]);
 
   const handleAddBuildingSave = useCallback(
-    (file: File, buildingName: string, buildingStyle: BuildingStyleId) => {
-      void startImagePlacement(file, { buildingName, buildingStyle });
+    (file: File, buildingName: string, buildingStyle: string, stylePrompt: string) => {
+      void startImagePlacement(file, { buildingName, buildingStyle, stylePrompt });
     },
     [startImagePlacement]
   );
@@ -2579,8 +2590,8 @@ const App: React.FC = () => {
       <AddBuildingModal
         open={showAddBuildingModal}
         onClose={() => setShowAddBuildingModal(false)}
-        onSave={(file, buildingName, buildingStyle) => {
-          handleAddBuildingSave(file, buildingName, buildingStyle);
+        onSave={(file, buildingName, buildingStyle, stylePrompt) => {
+          handleAddBuildingSave(file, buildingName, buildingStyle, stylePrompt);
         }}
       />
 
