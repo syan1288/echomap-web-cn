@@ -1,5 +1,5 @@
 
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { LocalizationProvider } from './context/LocalizationContext';
@@ -15,60 +15,19 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-const forceMobileBuild = import.meta.env.VITE_APP_TARGET === 'mobile';
-const MobileApp = React.lazy(() =>
-  import('./mobile/app/MobileApp').then((module) => ({ default: module.MobileApp }))
+const RootApp = React.lazy(() =>
+  import.meta.env.VITE_APP_TARGET === 'mobile'
+    ? import('./mobile/app/MobileApp').then((module) => ({ default: module.MobileApp }))
+    : import('./web/app/WebApp').then((module) => ({ default: module.WebApp }))
 );
-const WebApp = React.lazy(() =>
-  import('./web/app/WebApp').then((module) => ({ default: module.WebApp }))
-);
-
-function getAppTarget(): 'web' | 'mobile' {
-  if (forceMobileBuild) return 'mobile';
-  return shouldUseMobileShell({
-    width: window.innerWidth,
-    height: window.innerHeight,
-    userAgent: navigator.userAgent,
-    platform: navigator.platform,
-    maxTouchPoints: navigator.maxTouchPoints,
-    coarsePointer: window.matchMedia('(pointer: coarse)').matches,
-  })
-    ? 'mobile'
-    : 'web';
-}
-
-function AppEntry() {
-  const [target, setTarget] = useState(getAppTarget);
-
-  useEffect(() => {
-    if (forceMobileBuild) return undefined;
-
-    const updateTarget = () => {
-      const nextTarget = getAppTarget();
-      setTarget((currentTarget) => currentTarget === nextTarget ? currentTarget : nextTarget);
-    };
-
-    window.addEventListener('resize', updateTarget);
-    window.addEventListener('orientationchange', updateTarget);
-    return () => {
-      window.removeEventListener('resize', updateTarget);
-      window.removeEventListener('orientationchange', updateTarget);
-    };
-  }, []);
-
-  const App = target === 'mobile' ? MobileApp : WebApp;
-  return (
-    <Suspense fallback={null}>
-      <App />
-    </Suspense>
-  );
-}
 
 root.render(
   <React.StrictMode>
     <LocalizationProvider>
       <AuthProvider>
-        <AppEntry />
+        <Suspense fallback={null}>
+          <RootApp />
+        </Suspense>
       </AuthProvider>
     </LocalizationProvider>
   </React.StrictMode>

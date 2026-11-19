@@ -4,7 +4,6 @@ import path from 'node:path';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import generateHandler from '../api/generate.js';
 import geocodeHandler from '../api/geocode.js';
-import authSendSmsHookHandler from '../api/auth/send-sms-hook.js';
 import generationQuotaHandler from '../api/generation-quota.js';
 import healthHandler from '../api/echo-health.js';
 import paymentsCreateOrderHandler from '../api/payments-create-order.js';

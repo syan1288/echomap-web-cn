@@ -3,7 +3,6 @@ import { apiUrl } from '../lib/apiBase';
 import type { AudioEntry, ProcessedImage, PhotoData, LogData } from '../web/app/webMemoryTypes';
 import { normalizeLog } from '../shared/domain/memory/normalizeLog';
 import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from '../shared/domain/building-style/buildingStyle';
-import { mapWithConcurrency } from '../shared/domain/cloud/concurrentMap';
 
 export { isSupabaseConfigured };
 

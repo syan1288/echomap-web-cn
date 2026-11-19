@@ -23,7 +23,6 @@ Use the remaining Tencent Cloud Lighthouse term as the production validation win
 - [ ] Keep Gemini as optional instead of the default mainland path.
 - [x] Add basic Free generation limits before opening wider traffic.
 - [ ] Verify production `.env` sets Supabase server auth and quota variables.
-- [ ] Enable Supabase Phone provider and domestic SMS delivery before exposing phone login; see `docs/phone-auth-rollout.md` and `docs/tencent-sms-supabase-hook.md`.
 - [ ] After the first authenticated successful generation, verify `logs/entitlements.json` is created at `ECHO_ENTITLEMENTS_STORE_PATH` and records the user's consumed quota.
 - [ ] Before multi-instance production, migrate `ECHO_ENTITLEMENTS_STORE` from `file` to `supabase` using `docs/quota-persistence.md`.
 - [ ] Configure manual payment URLs and verify `/api/payments/create-order` writes pending manual orders.

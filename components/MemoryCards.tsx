@@ -94,7 +94,7 @@ export const MemoryCards: React.FC<MemoryCardsProps> = ({
         
         let top = screenPoint.y - markerHeight / 2 - cardsHeight - verticalGap;
         
-        if (top < 12) {
+        if (top < 12) { 
             top = screenPoint.y + markerHeight / 2 + verticalGap;
         }
         
@@ -187,8 +187,8 @@ export const MemoryCards: React.FC<MemoryCardsProps> = ({
                     event.preventDefault();
                     event.stopPropagation();
                     onUnlock();
-                }}
-                className="pointer-events-auto absolute left-1/2 top-full z-[60] mt-2 flex h-10 w-10 -translate-x-1/2 touch-manipulation items-center justify-center rounded-full border border-black bg-white p-2 text-black shadow-lg outline-none hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                }} 
+                className="pointer-events-auto absolute left-1/2 top-full z-[60] mt-2 flex h-10 w-10 -translate-x-1/2 touch-manipulation items-center justify-center rounded-full border border-black bg-white p-2 text-black shadow-lg outline-none hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black" 
                 aria-label={t('cardsUnlock')}
             >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>

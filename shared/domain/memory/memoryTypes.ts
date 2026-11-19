@@ -66,6 +66,4 @@ export interface ProcessedImage<
   log: LogData;
   /** 生成时使用的建筑风格，用于再生成时沿用 */
   buildingStyle?: BuildingStyleId;
-  /** 用户保存的风格规则快照；固定建筑系统规则不在客户端保存 */
-  stylePrompt?: string;
 }

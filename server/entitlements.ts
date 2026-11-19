@@ -11,6 +11,7 @@ export type EntitlementEnv = {
   ECHO_ENTITLEMENTS_STORE_PATH?: string;
   ECHO_ENTITLEMENTS_TABLE?: string;
   SUPABASE_URL?: string;
+  SUPABASE_SECRET_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   SUPABASE_ANON_KEY?: string;
   VITE_SUPABASE_URL?: string;
@@ -39,7 +40,6 @@ export type GenerationEntitlement =
       limit: number;
       used: number;
       remaining: number;
-      unlimited?: true;
     }
   | {
       allowed: false;
@@ -94,7 +94,6 @@ export type UserEntitlementRecord = {
   monthlyPeriodKey: string;
   monthlyGenerationUsed: number;
   extraCredits: number;
-  generationUnlimited?: boolean;
   landmarkCount: number;
   photoCount: number;
   storageBytesUsed: number;
@@ -200,7 +199,6 @@ function recordFromSupabaseRow(row: SupabaseEntitlementRow): UserEntitlementReco
     monthlyPeriodKey: rowString(row, 'period_key', currentMonthKey()),
     monthlyGenerationUsed: rowNumber(row, 'generation_used', rowNumber(row, 'monthly_generation_used', 0)),
     extraCredits: rowNumber(row, 'extra_credits', 0),
-    generationUnlimited: row['generation_unlimited'] === true,
     landmarkCount: rowNumber(row, 'landmark_count', 0),
     photoCount: rowNumber(row, 'photo_count', 0),
     storageBytesUsed: rowNumber(row, 'storage_bytes_used', 0),
@@ -218,7 +216,6 @@ function recordToSupabaseRow(userId: string, record: UserEntitlementRecord): Sup
     photo_count: record.photoCount,
     storage_bytes_used: record.storageBytesUsed,
     extra_credits: record.extraCredits,
-    generation_unlimited: record.generationUnlimited === true,
     created_at: record.createdAt,
     updated_at: record.updatedAt,
   };
@@ -230,9 +227,9 @@ export class SupabaseEntitlementStore implements EntitlementStoreAdapter {
 
   constructor(env: EntitlementEnv = process.env) {
     const url = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
-    const key = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+    const key = (env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
     if (!url || !key) {
-      throw new Error('Supabase entitlement store requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+      throw new Error('Supabase entitlement store requires SUPABASE_URL and a server-side Supabase key');
     }
     this.client = createClient(url, key, { auth: { persistSession: false } });
     this.tableName = env.ECHO_ENTITLEMENTS_TABLE?.trim() || 'echo_entitlements';
@@ -280,7 +277,6 @@ function normalizeRecord(
       0,
       Math.trunc(record?.extraCredits ?? intFromEnv(env.ECHO_INITIAL_EXTRA_CREDITS, 0))
     ),
-    generationUnlimited: record?.generationUnlimited === true,
     landmarkCount: normalizeUsageNumber(record?.landmarkCount),
     photoCount: normalizeUsageNumber(record?.photoCount),
     storageBytesUsed: normalizeUsageNumber(record?.storageBytesUsed),
@@ -394,18 +390,6 @@ function evaluateUsageRecord(
 }
 
 function evaluateRecord(record: UserEntitlementRecord, env: EntitlementEnv): GenerationEntitlement {
-  if (record.generationUnlimited) {
-    return {
-      allowed: true,
-      plan: record.plan,
-      periodKey: 'unlimited',
-      limit: Number.MAX_SAFE_INTEGER,
-      used: 0,
-      remaining: Number.MAX_SAFE_INTEGER,
-      unlimited: true,
-    };
-  }
-
   const starterLimit = record.plan === 'free' ? intFromEnv(env.ECHO_FREE_STARTER_GENERATIONS, 8) : 0;
   if (record.lifetimeSuccessfulGenerations < starterLimit) {
     return {
@@ -475,9 +459,7 @@ export async function consumeGenerationEntitlement(
     return before;
   }
 
-  if (before.periodKey === 'unlimited') {
-    // Unlimited whitelist accounts are allowed without consuming starter/monthly/extra quota.
-  } else if (before.periodKey === 'starter') {
+  if (before.periodKey === 'starter') {
     record.lifetimeSuccessfulGenerations += 1;
   } else if (before.periodKey === 'extra') {
     record.extraCredits = Math.max(0, record.extraCredits - 1);
@@ -487,7 +469,6 @@ export async function consumeGenerationEntitlement(
 
   record.updatedAt = now.toISOString();
   await store.writeUser(userId, record);
-  if (before.periodKey === 'unlimited') return before;
   return {
     ...before,
     used: before.used + 1,
@@ -510,22 +491,6 @@ export async function grantExtraCredits(
 
   const record = normalizeRecord(await store.readUser(userId), env, now);
   record.extraCredits += normalizedCredits;
-  record.updatedAt = now.toISOString();
-  await store.writeUser(userId, record);
-  return record;
-}
-
-export async function grantGenerationUnlimited(
-  userId: string,
-  enabled = true,
-  env: EntitlementEnv = process.env,
-  now = new Date(),
-  store: EntitlementStoreAdapter = createEntitlementStore(env)
-): Promise<UserEntitlementRecord> {
-  if (!userId.trim()) throw new Error('userId is required');
-
-  const record = normalizeRecord(await store.readUser(userId), env, now);
-  record.generationUnlimited = enabled;
   record.updatedAt = now.toISOString();
   await store.writeUser(userId, record);
   return record;

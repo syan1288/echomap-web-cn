@@ -157,7 +157,6 @@ export const generateImageWithPrompt = async (
     requestedModel?: PreferredImageModel;
     backend?: string;
     code?: string;
-    requestId?: string;
   };
 
   if (!res.ok) {

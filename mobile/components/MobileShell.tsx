@@ -32,42 +32,28 @@ import { GalleryDetailModals } from '../../components/GalleryDetailModals';
 import { HelpModal } from '../../components/HelpModal';
 import { VersionPlanModal } from '../../components/VersionPlanModal';
 import { AddBuildingModal } from '../../components/AddBuildingModal';
-import { BuildingStyleEditorModal } from '../../components/BuildingStyleEditorModal';
 import { MoonFaceAvatar } from '../../components/MoonFaceAvatar';
 import { EchoSidebarBrandIllustration } from '../../components/EchoSidebarBrandIllustration';
 import { SidebarNoiseCanvas } from '../../components/SidebarNoiseCanvas';
 import { deploymentConfig } from '../../lib/deploymentConfig';
-import {
-  BASEMAP_THEME_OPTIONS,
-  getPoiDotColor,
-  getPoiDotSize,
-  type BasemapThemeId,
-  MapboxAdapter,
-  createRasterFallbackStyle,
-} from '../../lib/mapboxAdapter';
+import { BASEMAP_THEME_OPTIONS, getPoiDotColor, getPoiDotSize, type BasemapThemeId, MapboxAdapter } from '../../lib/mapboxAdapter';
 import { loadMapbox, prewarmMapbox } from '../../lib/mapboxLoader';
 import { apiUrl } from '../../lib/apiBase';
-import { scheduleDeadline } from '../../lib/cloudSyncDeadline';
 import { buildPlaceSearchUrl, buildReverseGeocodeUrl } from '../../lib/deploymentConfig';
-import {
-  fetchImageProviderAvailability,
-  type ImageProviderAvailability,
-} from '../../services/imageProviderAvailability';
 import { checkGenerationQuota, generateImageWithPrompt, type PreferredImageModel } from '../../services/geminiService';
 import { assertFileSizeOk } from '../../shared/domain/uploads/uploadLimits';
-import { buildGeocodeQueries, shouldGeocodeBuildingName } from '../../shared/domain/geo/geoFromBuildingName';
+import { buildGeocodeQueries, hasGeographicHint } from '../../shared/domain/geo/geoFromBuildingName';
 import { continentKeyFromLatLng } from '../../shared/domain/geo/geoStats';
 import { parseReverseGeocodePlace, parseSearchSuggestions, type SearchSuggestion } from '../../shared/domain/geo/locationParsers';
-import { DEFAULT_BUILDING_STYLE, type BuildingStyleDefinition, type BuildingStyleId } from '../../shared/domain/building-style/buildingStyle';
-import { useBuildingStyles } from '../../hooks/useBuildingStyles';
+import { DEFAULT_BUILDING_STYLE, type BuildingStyleId } from '../../shared/domain/building-style/buildingStyle';
 import { clampGalleryPage, paginateGalleryItems } from '../../shared/domain/galleryPagination';
 import type { AudioEntry, LogData, PhotoData, ProcessedImage } from '../../web/app/webMemoryTypes';
 import './MobileShell.css';
 
 type MobileTab = 'home' | 'map' | 'gallery' | 'setting';
 type LoginMode = 'intro' | 'signup' | 'signin';
-type MobileModelId = 'jimeng' | 'gemini';
-type SettingSubview = 'main' | 'account' | 'privacy' | 'styles';
+type MobileModelId = 'jimeng' | 'gemini' | 'chat-image-2';
+type SettingSubview = 'main' | 'account' | 'privacy';
 type ProfileEditField = 'name' | 'phone' | 'email';
 type PermissionKind = 'notifications' | 'camera' | 'photos' | 'microphone' | 'files' | 'bluetooth';
 type MobileMapPlacement = { lat: number; lng: number; location?: string };
@@ -88,7 +74,6 @@ type MobileMemory = {
   log?: LogData;
   deleted?: boolean;
   buildingStyle?: BuildingStyleId;
-  stylePrompt?: string;
   isGenerating?: boolean;
   generationError?: string;
   defaultUnlocked?: boolean;
@@ -150,6 +135,7 @@ const PLACE_LABELS: Record<string, { en: string; zh: string }> = {
 const MOBILE_MODEL_OPTIONS: Array<{ id: MobileModelId; label: string }> = [
   { id: 'jimeng', label: '即梦' },
   { id: 'gemini', label: 'Gemini' },
+  { id: 'chat-image-2', label: 'ChatGPT-image-2.0' },
 ];
 const MOBILE_MODEL_STORAGE_KEY = 'echomap-mobile-image-model';
 const MOBILE_MEMORIES_STORAGE_KEY = 'echomap-mobile-memories-v1';
@@ -169,17 +155,17 @@ function mapBuildingZoomScale(zoom: number): number {
 }
 
 function isMobileModelId(value: string | null | undefined): value is MobileModelId {
-  return value === 'jimeng' || value === 'gemini';
+  return value === 'jimeng' || value === 'gemini' || value === 'chat-image-2';
 }
 
 function readStoredMobileModel(): MobileModelId {
-  if (typeof window === 'undefined') return 'gemini';
+  if (typeof window === 'undefined') return 'chat-image-2';
   const stored = window.localStorage.getItem(MOBILE_MODEL_STORAGE_KEY);
-  return isMobileModelId(stored) ? stored : 'gemini';
+  return isMobileModelId(stored) ? stored : 'chat-image-2';
 }
 
 function preferredImageModelFromMobileModel(model: MobileModelId): PreferredImageModel {
-  return model;
+  return model === 'chat-image-2' ? 'chatgpt-image' : model;
 }
 
 const mobileSynth = new Tone.Synth({
@@ -215,17 +201,13 @@ const MOBILE_COPY = {
     home: 'Home',
     map: 'Map',
     gallery: 'Gallery',
-    setting: 'Settings',
-    primaryNavigation: 'Primary navigation',
+    setting: 'Setting',
     city: 'CITY',
     country: 'COUNTRY',
     continent: 'CONTINENT',
     loadingMap: 'Loading map...',
     mapboxLoadFailed: 'Mapbox failed to load',
     mapboxTokenMissing: 'Mapbox token missing',
-    cloudSyncSlow: 'Cloud sync is taking longer. Local data is available while it continues.',
-    cloudSyncFailed: 'Cloud sync failed. Showing saved data available on this device.',
-    cloudEmpty: 'No saved memories were found in your cloud account.',
     typeLocationFirst: 'Type a location first',
     noMatchingMemory: 'No matching memory',
     currentLocation: 'Current location',
@@ -265,8 +247,6 @@ const MOBILE_COPY = {
     language: 'Language',
     model: 'Model',
     chooseModel: 'Choose model',
-    providerNotConfigured: 'Not configured',
-    imageProviderNotConfigured: 'This image provider is not configured. Choose an available provider in Settings.',
     controls: 'Controls',
     versionPlan: 'Version Plan',
     permissionPrivacy: 'Permission & Privacy',
@@ -306,16 +286,12 @@ const MOBILE_COPY = {
     map: '地图',
     gallery: '相册',
     setting: '设置',
-    primaryNavigation: '主导航',
     city: '城市',
     country: '国家',
     continent: '洲',
     loadingMap: '地图加载中...',
     mapboxLoadFailed: 'Mapbox 加载失败',
     mapboxTokenMissing: '缺少 Mapbox token',
-    cloudSyncSlow: '云端同步耗时较长，可先继续使用本地内容。',
-    cloudSyncFailed: '云端同步失败，当前仅显示此设备已保存的内容。',
-    cloudEmpty: '云端账号中暂时没有已保存的记忆。',
     typeLocationFirst: '请先输入地点',
     noMatchingMemory: '没有匹配的回忆',
     currentLocation: '当前位置',
@@ -355,8 +331,6 @@ const MOBILE_COPY = {
     language: '语言',
     model: '模型',
     chooseModel: '选择模型',
-    providerNotConfigured: '未配置',
-    imageProviderNotConfigured: '当前生图渠道尚未配置，请在设置中选择可用渠道。',
     controls: '操作',
     versionPlan: '版本方案',
     permissionPrivacy: '权限与隐私',
@@ -425,6 +399,7 @@ const OpenAIBrandIcon: React.FC<{ size?: number }> = ({ size = 24 }) => (
 
 const MobileModelIcon: React.FC<{ model: MobileModelId; size?: number }> = ({ model, size = 24 }) => {
   if (model === 'gemini') return <GeminiBrandIcon size={size} />;
+  if (model === 'chat-image-2') return <OpenAIBrandIcon size={size} />;
   return <JimengBrandIcon size={size} />;
 };
 
@@ -672,12 +647,7 @@ function mobileGenerationErrorMessage(error: unknown, fallback: string, language
       ? '请先登录后再生成 3D 建筑。'
       : 'Please sign in before generating a 3D building.';
   }
-  const requestId = raw.match(/request\s*id["':\s]+([a-f0-9-]{12,})/i)?.[1];
-  if (requestId && language === 'zh') return `生图失败，诊断编号：${requestId}`;
-  if (/JIMENG_(?:ACCESS_KEY_ID|SECRET_ACCESS_KEY).*missing|OPENAI_API_KEY.*missing|Gemini API key.*missing|not configured/i.test(raw)) {
-    return MOBILE_COPY[language].imageProviderNotConfigured;
-  }
-  if (raw && language === 'en') return raw;
+  if (raw) return raw;
   return fallback;
 }
 
@@ -971,7 +941,7 @@ async function resolveMobileBuildingPlacement(
   }
 
   const name = buildingName.trim();
-  if (shouldGeocodeBuildingName(name)) {
+  if (name && hasGeographicHint(name)) {
     const queries = buildGeocodeQueries(name);
     for (const query of queries) {
       try {
@@ -1298,7 +1268,7 @@ function LoginScreen({ onComplete }: { onComplete: () => void }) {
         mode === 'signin'
           ? await signInWithEmail(email, password)
           : await signUpWithEmail(email, password);
-      if (result.ok === false) {
+      if (!result.ok) {
         setHint(result.message);
         return;
       }
@@ -1340,37 +1310,39 @@ function LoginScreen({ onComplete }: { onComplete: () => void }) {
               <EchoPencilIcon strokeWidth={2} />
             </RoundButton>
           </div>
-          <label className="relative mb-5 block">
-            <span className="absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black">
-              <EchoMailIcon strokeWidth={2} />
-            </span>
-            <input
-              className="h-[50px] w-full rounded-full border-0 bg-white px-14 text-[16px] outline-none"
-              aria-label={copy.email}
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={loading || busy}
-            />
-          </label>
-          <label className="relative block">
-            <span className="absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black">
-              <EchoKeyIcon strokeWidth={2.2} />
-            </span>
-            <input
-              className="h-[50px] w-full rounded-full border-0 bg-white px-14 text-[16px] outline-none"
-              aria-label={copy.password}
-              type="password"
-              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={loading || busy}
-            />
-            <button type="submit" disabled={loading || busy} className="absolute right-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black disabled:opacity-40" aria-label={copy.enterEchoMap}>
-              <EchoArrowRightIcon strokeWidth={2.4} />
-            </button>
-          </label>
+          <>
+              <label className="relative mb-5 block">
+                <span className="absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black">
+                  <EchoMailIcon strokeWidth={2} />
+                </span>
+                <input
+                  className="h-[50px] w-full rounded-full border-0 bg-white px-14 text-[16px] outline-none"
+                  aria-label={copy.email}
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={loading || busy}
+                />
+              </label>
+              <label className="relative block">
+                <span className="absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black">
+                  <EchoKeyIcon strokeWidth={2.2} />
+                </span>
+                <input
+                  className="h-[50px] w-full rounded-full border-0 bg-white px-14 text-[16px] outline-none"
+                  aria-label={copy.password}
+                  type="password"
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  disabled={loading || busy}
+                />
+                <button type="submit" disabled={loading || busy} className="absolute right-5 top-1/2 h-6 w-6 -translate-y-1/2 text-black disabled:opacity-40" aria-label={copy.enterEchoMap}>
+                  <EchoArrowRightIcon strokeWidth={2.4} />
+                </button>
+              </label>
+            </>
           <p className="m-0 mt-5 text-right text-[16px]" style={{ color: BRAND_BLUE }}>
             {hint ?? (mode === 'signup' ? copy.checkEmail : copy.forgetPassword)}
           </p>
@@ -1393,12 +1365,8 @@ function BottomNav({ activeTab, onChange }: { activeTab: MobileTab; onChange: (t
   );
 
   return (
-    <nav
-      className="echo-bottom-nav fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.8rem,env(safe-area-inset-bottom))] pt-2"
-      style={{ background: activeTab === 'home' ? CREAM : SKY_BLUE }}
-      aria-label={copy.primaryNavigation}
-    >
-      <div className="grid grid-cols-4 items-start gap-0">
+    <nav className="echo-bottom-nav fixed inset-x-0 bottom-0 z-40 px-8 pb-[max(0.8rem,env(safe-area-inset-bottom))] pt-3" style={{ background: activeTab === 'map' ? SKY_BLUE : activeTab === 'home' ? CREAM : SKY_BLUE }}>
+      <div className="grid grid-cols-4 items-center gap-7">
         {tabs.map((tab) => {
           const active = tab.id === activeTab;
           return (
@@ -1407,15 +1375,9 @@ function BottomNav({ activeTab, onChange }: { activeTab: MobileTab; onChange: (t
               type="button"
               onClick={() => onChange(tab.id)}
               aria-label={tab.label}
-              aria-current={active ? 'page' : undefined}
-              className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 border-0 bg-transparent px-1 py-0 text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0758d6]"
+              className={`echo-nav-orb mx-auto flex h-[42px] w-[42px] items-center justify-center rounded-full ${active ? 'echo-nav-orb-active text-[#1683ff]' : 'text-black'}`}
             >
-              <span className={`echo-nav-orb flex h-[38px] w-[38px] items-center justify-center rounded-full ${active ? 'echo-nav-orb-active text-[#1683ff]' : 'text-black'}`}>
-                <span className="h-[23px] w-[23px]">{tab.icon}</span>
-              </span>
-              <span className={`whitespace-nowrap text-[10px] leading-3 ${active ? 'font-semibold text-[#0758d6]' : 'text-[#30343a]'}`}>
-                {tab.label}
-              </span>
+              <span className="h-[25px] w-[25px]">{tab.icon}</span>
             </button>
           );
         })}
@@ -1804,10 +1766,6 @@ function MapPage({
           minZoom: 1,
           maxZoom: 18,
           style: MOBILE_MAPBOX_STYLE,
-          fallbackStyle: createRasterFallbackStyle(
-            deploymentConfig.mapTileUrl,
-            deploymentConfig.mapTileAttribution
-          ),
         });
         map.setBasemapTheme(basemapTheme);
         map.applyEditorialStyle();
@@ -2950,17 +2908,14 @@ function SettingPage({
   onClose,
   selectedModel,
   onModelChange,
-  imageProviderAvailability,
 }: {
   memories: MobileMemory[];
   onClose: () => void;
   selectedModel: MobileModelId;
   onModelChange: (model: MobileModelId) => void;
-  imageProviderAvailability: ImageProviderAvailability | null;
 }) {
   const { user, signOut } = useAuth();
   const { language, toggleLanguage } = useLocalization();
-  const { styles, update, create, remove } = useBuildingStyles();
   const accountEmail = user?.email?.trim() ?? '';
   const accountPhone = user?.phone?.trim()
     || metadataString(user?.user_metadata?.phone)
@@ -2977,8 +2932,6 @@ function SettingPage({
   const [permissionHint, setPermissionHint] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
   const [subview, setSubview] = useState<SettingSubview>('main');
-  const [editingStyle, setEditingStyle] = useState<BuildingStyleDefinition | null>(null);
-  const [creatingStyle, setCreatingStyle] = useState(false);
   const [accountName, setAccountName] = useState(() => {
     if (typeof window === 'undefined') return defaultAccountName(profileIdentifier);
     return window.localStorage.getItem(`${profileStorageKey}:name`) || defaultAccountName(profileIdentifier);
@@ -3016,7 +2969,7 @@ function SettingPage({
     ],
     [copy],
   );
-  const sheetTitle = subview === 'account' ? copy.editProfile : subview === 'privacy' ? copy.privacyTitle : subview === 'styles' ? '生图风格' : copy.settings;
+  const sheetTitle = subview === 'account' ? copy.editProfile : subview === 'privacy' ? copy.privacyTitle : copy.settings;
 
   useEffect(() => {
     setDraftAccountName(accountName);
@@ -3180,42 +3133,7 @@ function SettingPage({
           {sheetTitle}
         </h2>
 
-        {subview === 'styles' ? (
-          <div className="mt-8 space-y-3" style={{ fontFamily: MONO_FONT }}>
-            {styles.map((style) => (
-              <button
-                key={style.id}
-                type="button"
-                className="echo-setting-row"
-                onClick={() => {
-                  setCreatingStyle(false);
-                  setEditingStyle(style);
-                }}
-              >
-                <span className="h-2.5 w-2.5 rounded-full bg-current" aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-left text-[14px] font-bold text-current">{style.name}</span>
-                <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
-              </button>
-            ))}
-            <button
-              type="button"
-              className="echo-setting-row"
-              onClick={() => {
-                setEditingStyle({
-                  id: `custom-${Date.now()}`,
-                  name: 'Custom style',
-                  prompt: styles.find((style) => style.id === DEFAULT_BUILDING_STYLE)?.prompt || '',
-                  builtin: false,
-                });
-                setCreatingStyle(true);
-              }}
-            >
-              <span className="h-2.5 w-2.5 rounded-full border border-current" aria-hidden />
-              <span className="min-w-0 flex-1 text-left text-[14px] font-bold text-current">新建自定义风格</span>
-              <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
-            </button>
-          </div>
-        ) : subview === 'account' ? (
+        {subview === 'account' ? (
           <div className="mt-16">
             <div className="relative mx-auto h-[76px] w-[76px]">
               <div className="echo-settings-avatar echo-profile-avatar flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-white text-black">
@@ -3401,12 +3319,6 @@ function SettingPage({
                 <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
               </button>
 
-              <button type="button" className="echo-setting-row" aria-label="生图风格" onClick={() => setSubview('styles')}>
-                <span className="echo-setting-icon echo-setting-icon-pure"><EchoSparklesIcon strokeWidth={1.5} /></span>
-                <span className="min-w-0 flex-1 text-left text-[14px] font-bold tracking-[0.02em] text-[#666]">生图风格</span>
-                <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
-              </button>
-
               <div className="overflow-visible rounded-[16px] bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
                 <button type="button" className="echo-setting-row rounded-b-none shadow-none" onClick={toggleLanguage} aria-label={copy.language}>
                   <span className="echo-setting-icon echo-setting-icon-pure"><IconLanguage size={22} /></span>
@@ -3432,19 +3344,14 @@ function SettingPage({
                   </button>
                   {modelMenuOpen && (
                     <div
-                      className="absolute right-0 top-[calc(100%+0.35rem)] z-50 w-[280px] max-w-[calc(100vw-2rem)] rounded-[8px] border border-black/10 bg-white px-1.5 py-1.5 shadow-[0_6px_16px_rgba(0,0,0,0.12)]"
+                      className="absolute right-0 top-[calc(100%+0.35rem)] z-50 w-[176px] max-w-[calc(100vw-4rem)] rounded-[8px] border border-black/10 bg-white px-1.5 py-1.5 shadow-[0_6px_16px_rgba(0,0,0,0.12)]"
                       style={{ fontFamily: MONO_FONT }}
                     >
                       {MOBILE_MODEL_OPTIONS.map((option) => (
                         <button
                           key={option.id}
                           type="button"
-                          disabled={
-                            imageProviderAvailability?.[
-                              option.id
-                            ] === false
-                          }
-                          className="flex min-h-[44px] w-full items-center gap-3 rounded-[6px] border-0 bg-transparent px-3 py-2 text-left text-[14px] font-bold tracking-[0.02em] hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="flex min-h-[44px] w-full items-center gap-3 rounded-[6px] border-0 bg-transparent px-3 py-2 text-left text-[14px] font-bold tracking-[0.02em] hover:bg-black/5"
                           style={{ color: '#666' }}
                           onClick={() => {
                             onModelChange(option.id);
@@ -3454,14 +3361,7 @@ function SettingPage({
                           <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center">
                             <MobileModelIcon model={option.id} size={22} />
                           </span>
-                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                          {imageProviderAvailability?.[
-                            option.id
-                          ] === false && (
-                            <span className="max-w-[78px] shrink-0 text-right text-[10px] font-normal leading-tight whitespace-normal">
-                              {copy.providerNotConfigured}
-                            </span>
-                          )}
+                          <span>{option.label}</span>
                         </button>
                       ))}
                     </div>
@@ -3505,38 +3405,12 @@ function SettingPage({
           <VersionPlanModal title={copy.versionPlan} onClose={() => setVersionPlanModalOpen(false)} />
         </div>
       )}
-      <BuildingStyleEditorModal
-        open={Boolean(editingStyle)}
-        style={editingStyle}
-        onCancel={() => {
-          setEditingStyle(null);
-          setCreatingStyle(false);
-        }}
-        onSave={(name, prompt) => {
-          if (!editingStyle) return;
-          if (creatingStyle) {
-            create(name, prompt);
-          } else {
-            update({ ...editingStyle, name, prompt });
-          }
-          setEditingStyle(null);
-          setCreatingStyle(false);
-        }}
-        onDelete={() => {
-          if (!editingStyle || creatingStyle) return;
-          if (window.confirm('删除这个自定义风格？')) {
-            remove(editingStyle.id);
-            setEditingStyle(null);
-          }
-        }}
-      />
     </section>
   );
 }
 
 export function MobileShell() {
   const { loading, user } = useAuth();
-  const userId = user?.id;
   const { language } = useLocalization();
   const [activeTab, setActiveTab] = useState<MobileTab>('home');
   const [mountedTabs, setMountedTabs] = useState<Set<MobileTab>>(() => new Set<MobileTab>(['home', 'gallery', 'setting']));
@@ -3544,45 +3418,21 @@ export function MobileShell() {
   const [mapShouldMount, setMapShouldMount] = useState(false);
   const [memories, setMemories] = useState<MobileMemory[]>(() => restoredMobileMemoriesWithSeeds());
   const [cloudStatus, setCloudStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
-  const [cloudSyncSlow, setCloudSyncSlow] = useState(false);
-  const [cloudLoadError, setCloudLoadError] = useState(false);
   const [showAddBuildingModal, setShowAddBuildingModal] = useState(false);
   const [pendingMapPlacement, setPendingMapPlacement] = useState<MobileMapPlacement | null>(null);
   const [mapPlacementNotice, setMapPlacementNotice] = useState<MapPlacementNotice | null>(null);
   const [mapTextNotice, setMapTextNotice] = useState<MapTextNotice | null>(null);
   const [mapFocusMemoryId, setMapFocusMemoryId] = useState<number | null>(null);
   const [selectedModel, setSelectedModel] = useState<MobileModelId>(() => readStoredMobileModel());
-  const [imageProviderAvailability, setImageProviderAvailability] = useState<ImageProviderAvailability | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
   const cloudLoadedUserRef = useRef<string | null>(null);
   const nextCloudIdRef = useRef(1000);
 
-  useEffect(() => {
-    let cancelled = false;
-    void fetchImageProviderAvailability().then((availability) => {
-      if (!cancelled && availability) setImageProviderAvailability(availability);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!imageProviderAvailability) return;
-    const selectedProvider = selectedModel;
-    if (imageProviderAvailability[selectedProvider] !== false) return;
-    const fallback = (['gemini', 'jimeng'] as const).find(
-      (model) => imageProviderAvailability[model] === true
-    );
-    if (fallback) setSelectedModel(fallback);
-  }, [imageProviderAvailability, selectedModel]);
-
   const createMobileBuilding = useCallback(async (
     file: File | null,
     buildingName: string,
     buildingStyle: BuildingStyleId,
-    stylePrompt: string,
     placement: MobileMapPlacement | null,
   ) => {
     if (!file) return;
@@ -3621,7 +3471,6 @@ export function MobileShell() {
       photos: [photo],
       audioEntries: [],
       buildingStyle,
-      stylePrompt,
       isGenerating: true,
       generationError: undefined,
       defaultUnlocked: true,
@@ -3681,7 +3530,7 @@ export function MobileShell() {
     try {
       const preferredModel = preferredImageModelFromMobileModel(selectedModel);
       console.info('Mobile building generation started', { preferredModel, buildingStyle, buildingName: name });
-      const { imageUrl } = await generateImageWithPrompt(file, { buildingName: name, buildingStyle, stylePrompt, preferredModel });
+      const { imageUrl } = await generateImageWithPrompt(file, { buildingName: name, buildingStyle, preferredModel });
       if (!imageUrl) throw new Error('Generation failed, no image returned.');
       const processed = await processMobileImageForTransparency(imageUrl);
       setMemories((current) =>
@@ -3733,7 +3582,6 @@ export function MobileShell() {
       const { imageUrl } = await generateImageWithPrompt(photo.file, {
         buildingName,
         buildingStyle,
-        stylePrompt: memory.stylePrompt,
         preferredModel,
         userPrompt: userPrompt?.trim() || undefined,
       });
@@ -3863,55 +3711,32 @@ export function MobileShell() {
   }, [isAuthenticated, loading, user]);
 
   useEffect(() => {
-    if (!userId) {
+    if (!user) {
       cloudLoadedUserRef.current = null;
       setCloudStatus('idle');
-      setCloudSyncSlow(false);
-      setCloudLoadError(false);
       setMemories(restoredMobileMemoriesWithSeeds());
       return;
     }
     if (!isSupabaseConfigured) return;
-    if (cloudLoadedUserRef.current === userId) return;
-    let active = true;
-    cloudLoadedUserRef.current = userId;
+    if (cloudLoadedUserRef.current === user.id) return;
+    cloudLoadedUserRef.current = user.id;
     setCloudStatus('loading');
-    setMemories(mergeMobileMemories(readStoredMobileMemories()));
-    setCloudSyncSlow(false);
-    setCloudLoadError(false);
-    const cancelDeadline = scheduleDeadline(() => {
-      if (!active) return;
-      setCloudSyncSlow(true);
-      setCloudStatus('ready');
-    }, 15_000);
     void (async () => {
       try {
-        const loaded = await loadAllCloudBuildings(() => nextCloudIdRef.current++, userId);
-        if (!active) return;
+        const loaded = await loadAllCloudBuildings(() => nextCloudIdRef.current++);
         const nextMemories = loaded
           .map(mobileMemoryFromCloud)
           .filter((item): item is MobileMemory => Boolean(item));
         const realMemories = mergeMobileMemories(readStoredMobileMemories(), nextMemories);
-        setMemories(realMemories);
-        setCloudSyncSlow(false);
-        setCloudLoadError(false);
+        setMemories(realMemories.length ? realMemories : seedMemories);
         setCloudStatus('ready');
       } catch (error) {
-        if (!active) return;
         console.error('mobile cloud load failed', error);
-        setMemories(mergeMobileMemories(readStoredMobileMemories()));
-        setCloudSyncSlow(false);
-        setCloudLoadError(true);
+        setMemories(restoredMobileMemoriesWithSeeds());
         setCloudStatus('ready');
-      } finally {
-        cancelDeadline();
       }
     })();
-    return () => {
-      active = false;
-      cancelDeadline();
-    };
-  }, [userId]);
+  }, [user]);
 
   const deleteMobileMemory = useCallback((memoryToDelete: MobileMemory) => {
     rememberDeletedMobileMemory(memoryToDelete);
@@ -3988,7 +3813,7 @@ export function MobileShell() {
         onChange={(event) => {
           const file = event.target.files?.[0] ?? null;
           event.target.value = '';
-          void createMobileBuilding(file, '', DEFAULT_BUILDING_STYLE, '', pendingMapPlacement);
+          void createMobileBuilding(file, '', DEFAULT_BUILDING_STYLE, pendingMapPlacement);
         }}
       />
       {mountedTabs.has('home') && (
@@ -4036,7 +3861,6 @@ export function MobileShell() {
             onClose={() => setActiveTab('gallery')}
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
-            imageProviderAvailability={imageProviderAvailability}
           />
         </div>
       )}
@@ -4046,9 +3870,9 @@ export function MobileShell() {
           setShowAddBuildingModal(false);
           setPendingMapPlacement(null);
         }}
-        onSave={(file, buildingName, buildingStyle, stylePrompt) => {
+        onSave={(file, buildingName, buildingStyle) => {
           setShowAddBuildingModal(false);
-          void createMobileBuilding(file, buildingName, buildingStyle as BuildingStyleId, stylePrompt, pendingMapPlacement);
+          void createMobileBuilding(file, buildingName, buildingStyle, pendingMapPlacement);
           setPendingMapPlacement(null);
         }}
       />
@@ -4058,24 +3882,6 @@ export function MobileShell() {
           style={{ color: BRAND_BLUE, fontFamily: MONO_FONT }}
         >
           Syncing cloud...
-        </div>
-      )}
-      {cloudSyncSlow && (
-        <div
-          role="status"
-          className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-center text-[12px] shadow-sm"
-          style={{ color: BRAND_BLUE, fontFamily: MONO_FONT }}
-        >
-          {MOBILE_COPY[language].cloudSyncSlow}
-        </div>
-      )}
-      {cloudStatus === 'ready' && userId && !cloudSyncSlow && (cloudLoadError || memories.length === 0) && (
-        <div
-          role="status"
-          className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-center text-[12px] shadow-sm"
-          style={{ color: BRAND_BLUE, fontFamily: MONO_FONT }}
-        >
-          {cloudLoadError ? MOBILE_COPY[language].cloudSyncFailed : MOBILE_COPY[language].cloudEmpty}
         </div>
       )}
       {activeTab !== 'setting' && <BottomNav activeTab={activeTab} onChange={setActiveTab} />}

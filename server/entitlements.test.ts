@@ -6,11 +6,12 @@ import test from 'node:test';
 import {
   consumeGenerationEntitlement,
   consumeUsageEntitlement,
-  grantGenerationUnlimited,
+  createEntitlementStore,
   grantExtraCredits,
   getGenerationEntitlement,
   getUsageEntitlement,
   releaseUsageEntitlement,
+  SupabaseEntitlementStore,
   type EntitlementStoreAdapter,
   type EntitlementEnv,
   type UserEntitlementRecord,
@@ -114,36 +115,6 @@ test('grantExtraCredits rejects non-positive grants', async () => {
       () => grantExtraCredits('user_grant_invalid', 0, testEnv(dir)),
       /positive integer/
     );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('grantGenerationUnlimited allows generation without consuming quota', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'echo-entitlements-'));
-  try {
-    const env = testEnv(dir, {
-      ECHO_FREE_STARTER_GENERATIONS: '0',
-      ECHO_FREE_MONTHLY_GENERATIONS: '0',
-    });
-
-    const granted = await grantGenerationUnlimited('user_unlimited', true, env);
-    assert.equal(granted.generationUnlimited, true);
-
-    const first = await consumeGenerationEntitlement('user_unlimited', env);
-    assert.equal(first.allowed, true);
-    assert.equal(first.periodKey, 'unlimited');
-    assert.equal(first.unlimited, true);
-    assert.equal(first.used, 0);
-
-    const second = await consumeGenerationEntitlement('user_unlimited', env);
-    assert.equal(second.allowed, true);
-    assert.equal(second.periodKey, 'unlimited');
-
-    const entitlement = await getGenerationEntitlement('user_unlimited', env);
-    assert.equal(entitlement.allowed, true);
-    assert.equal(entitlement.unlimited, true);
-    assert.equal(entitlement.used, 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -268,4 +239,14 @@ test('entitlements can read and write through an injected store adapter', async 
   assert.equal(result.allowed, true);
   assert.equal(result.usage.landmarkCount, 1);
   assert.deepEqual(writes, ['adapter_user']);
+});
+
+test('Supabase entitlement store accepts the current secret key env name', () => {
+  const env = {
+    ECHO_ENTITLEMENTS_STORE: 'supabase',
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_test_key',
+  } as EntitlementEnv;
+
+  assert.ok(createEntitlementStore(env) instanceof SupabaseEntitlementStore);
 });

@@ -22,7 +22,7 @@ function GlassInput({
 }: {
   type: 'email' | 'password';
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
   placeholder: string;
   leftIcon: React.ReactNode;
   onSubmit: () => void;
@@ -30,7 +30,7 @@ function GlassInput({
 }) {
   return (
     <div
-      className="w-full h-11 rounded-full border border-white/70 bg-white/55 backdrop-blur-md flex items-center gap-2 px-3"
+      className="flex h-11 w-full items-center gap-2 rounded-full border border-white/70 bg-white/55 px-3 backdrop-blur-md"
       style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)' }}
     >
       <span className="shrink-0 text-black">{leftIcon}</span>
@@ -38,19 +38,19 @@ function GlassInput({
         type={type}
         autoComplete={type === 'email' ? 'email' : 'current-password'}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-[#1d1d1d] outline-none"
         style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onSubmit();
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') onSubmit();
         }}
       />
       {showSubmit && (
         <button
           type="button"
           onClick={onSubmit}
-          className="h-7 w-7 rounded-full border-0 bg-transparent flex items-center justify-center cursor-pointer hover:bg-black/5"
+          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent hover:bg-black/5"
           aria-label="submit auth"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round">
@@ -73,22 +73,18 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
   const [hint, setHint] = useState<string | null>(null);
   const [registerConfirmShown, setRegisterConfirmShown] = useState(false);
 
-  if (!configured) return null;
-  if (loading) return null;
-  if (user) return null;
+  if (!configured || loading || user) return null;
 
   const submit = async () => {
     setHint(null);
     if (mode === 'signIn') setRegisterConfirmShown(false);
     setBusy(true);
     try {
-      const fn = mode === 'signIn' ? signInWithEmail : signUpWithEmail;
-      const r = await fn(email, password);
-      if (r.ok === false) {
-        setHint(r.message);
-        return;
-      }
-      if (mode === 'signUp') {
+      const authenticate = mode === 'signIn' ? signInWithEmail : signUpWithEmail;
+      const result = await authenticate(email, password);
+      if (!result.ok) {
+        setHint(result.message);
+      } else if (mode === 'signUp') {
         setRegisterConfirmShown(true);
       }
     } finally {
@@ -97,7 +93,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
   };
 
   return (
-    <div className="flex flex-col items-center gap-3 w-full">
+    <div className="flex w-full flex-col items-center gap-3">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -107,7 +103,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
             setRegisterConfirmShown(false);
             setExpanded(true);
           }}
-          className="h-11 w-11 rounded-full border border-white/65 flex items-center justify-center cursor-pointer transition-colors"
+          className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/65 transition-colors"
           style={{
             background: mode === 'signIn' ? BRAND_BLUE : 'rgba(255,255,255,0.75)',
             color: mode === 'signIn' ? '#fff' : '#111',
@@ -128,7 +124,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
             setRegisterConfirmShown(false);
             setExpanded(true);
           }}
-          className="h-11 w-11 rounded-full border border-white/65 flex items-center justify-center cursor-pointer transition-colors"
+          className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/65 transition-colors"
           style={{
             background: mode === 'signUp' ? BRAND_BLUE : 'rgba(255,255,255,0.75)',
             color: mode === 'signUp' ? '#fff' : '#111',
@@ -177,18 +173,18 @@ export const AuthPanel: React.FC<AuthPanelProps> = () => {
 
       {hint && (
         <p
-          className="m-0 text-[12px] text-center"
+          className="m-0 text-center text-[12px]"
           style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
         >
           {hint}
         </p>
       )}
       {expanded && (
-        <div className="h-[20px] flex items-center justify-center">
+        <div className="flex h-[20px] items-center justify-center">
           {mode === 'signIn' ? (
             <button
               type="button"
-              className="border-0 bg-transparent text-[12px] cursor-pointer"
+              className="cursor-pointer border-0 bg-transparent text-[12px]"
               style={{ color: BRAND_BLUE, fontFamily: '"Roboto Mono", ui-monospace, monospace', fontWeight: 400 }}
             >
               Forget password

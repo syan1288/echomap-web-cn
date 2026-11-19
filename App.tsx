@@ -21,7 +21,7 @@ import Shuffle from './components/Shuffle';
 import { AddBuildingModal } from './components/AddBuildingModal';
 import { GallerySection } from './components/GallerySection';
 import { continentKeyFromLatLng } from './shared/domain/geo/geoStats';
-import { buildGeocodeQueries, shouldGeocodeBuildingName } from './shared/domain/geo/geoFromBuildingName';
+import { buildGeocodeQueries, hasGeographicHint } from './shared/domain/geo/geoFromBuildingName';
 import { GalleryDetailModals } from './components/GalleryDetailModals';
 import { MemoryPhotoModal } from './components/MemoryPhotoModal';
 import { MemoryAudioModal } from './components/MemoryAudioModal';
@@ -29,14 +29,6 @@ import { AuthPanel } from './components/AuthPanel';
 import { resolveSessionAnchor, formatCityCountry } from './services/sessionGeo';
 import { normalizeLog } from './shared/domain/memory/normalizeLog';
 import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from './shared/domain/building-style/buildingStyle';
-import {
-  cloudSaveErrorKind,
-  cloudSaveErrorReason,
-  cloudSyncSignature,
-  findLockedUnsyncedCloudSaveCandidates,
-  isCloudSaveEligible,
-  mergeCloudLoadedImages,
-} from './shared/domain/cloud/cloudSync';
 import type { AudioEntry, LogData, PhotoData, ProcessedImage } from './web/app/webMemoryTypes';
 import { useAuth } from './context/AuthContext';
 import {
@@ -49,13 +41,7 @@ import { apiUrl } from './lib/apiBase';
 import type { ImageProvider, ImageProviderAvailability } from './services/imageProviderAvailability';
 import { buildReverseGeocodeUrl, deploymentConfig } from './lib/deploymentConfig';
 import { parseReverseGeocodePlace } from './shared/domain/geo/locationParsers';
-import {
-  BASEMAP_THEME_OPTIONS,
-  type BasemapThemeId,
-  MapboxAdapter,
-  createMapBounds,
-  createRasterFallbackStyle,
-} from './lib/mapboxAdapter';
+import { BASEMAP_THEME_OPTIONS, type BasemapThemeId, MapboxAdapter, createMapBounds } from './lib/mapboxAdapter';
 import { loadMapbox } from './lib/mapboxLoader';
 
 /** 侧栏地理文案：Roboto 作为 Google Sans 的可加载替代 */
