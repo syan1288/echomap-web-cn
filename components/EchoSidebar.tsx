@@ -399,7 +399,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     }
 
     const mainWidth = 176;
-    const submenuWidth = activeSubmenu === 'version' ? 244 : activeSubmenu === 'style' ? 320 : 204;
+    const submenuWidth = activeSubmenu === 'version' ? 244 : activeSubmenu === 'style' ? 260 : 204;
     const estimatedMainHeight = 174;
     const mainLeft = Math.min(Math.max(12, anchorRect.left), window.innerWidth - mainWidth - 12);
     const mainTop = Math.min(Math.max(12, anchorRect.top - estimatedMainHeight - 12), window.innerHeight - estimatedMainHeight - 12);
@@ -531,9 +531,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
 
         {activeSubmenu === 'style' && (
           <div className="space-y-1 text-left text-[13px] text-[#111]">
-            <div className="px-2 py-1 text-[13px] text-[#777]">
-              {language === 'zh' ? '生图风格' : 'Image style'}
-            </div>
             {styles.map((style) => (
               <button
                 key={style.id}
