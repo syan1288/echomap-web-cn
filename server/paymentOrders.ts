@@ -10,6 +10,10 @@ export type PaymentProvider = 'manual' | 'wechat_native';
 export type PaymentEnv = EntitlementEnv & WechatPayNativeEnv & {
   ECHO_PAYMENT_PROVIDER?: string;
   ECHO_PAYMENT_ADMIN_KEY?: string;
+  WECHAT_PAY_API_V3_KEY?: string;
+  WECHAT_PAY_PLATFORM_SERIAL_NO?: string;
+  WECHAT_PAY_PLATFORM_PUBLIC_KEY?: string;
+  WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH?: string;
   ECHO_PAYMENT_ORDERS_PATH?: string;
   ECHO_PLUS_PAYMENT_URL?: string;
   ECHO_PRO_PAYMENT_URL?: string;

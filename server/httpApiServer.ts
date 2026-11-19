@@ -11,6 +11,7 @@ import paymentsConfirmOrderHandler from '../api/payments-confirm-order.js';
 import paymentsWechatNotifyHandler from '../api/payments-wechat-notify.js';
 import shareMemoriesHandler from '../api/share-memories.js';
 import usageQuotaHandler from '../api/usage-quota.js';
+import { handleSupabaseSendSmsHook } from './supabaseSmsHook.js';
 
 function stripWrappingQuotes(value: string): string {
   if (value.length >= 2) {
@@ -55,6 +56,21 @@ const PORT = Number.parseInt(process.env.PORT || '3001', 10);
 const MAX_BODY_BYTES = 24 * 1024 * 1024;
 
 type Handler = (req: VercelRequest, res: VercelResponse) => Promise<void>;
+
+async function authSendSmsHookHandler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const rawBody =
+    typeof req.body === 'string'
+      ? req.body
+      : req.body && typeof req.body === 'object'
+        ? JSON.stringify(req.body)
+        : '';
+  const result = await handleSupabaseSendSmsHook(
+    rawBody,
+    req.headers as Record<string, string | string[] | undefined>,
+    process.env,
+  );
+  res.status(result.status).json(result.body);
+}
 
 const routes = new Map<string, Handler>([
   ['/api/auth/send-sms-hook', authSendSmsHookHandler],

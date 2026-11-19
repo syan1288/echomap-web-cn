@@ -496,6 +496,22 @@ export async function grantExtraCredits(
   return record;
 }
 
+export async function grantGenerationUnlimited(
+  userId: string,
+  enabled = true,
+  env: EntitlementEnv = process.env,
+  now = new Date(),
+  store: EntitlementStoreAdapter = createEntitlementStore(env)
+): Promise<UserEntitlementRecord> {
+  if (!userId.trim()) throw new Error('userId is required');
+
+  const record = normalizeRecord(await store.readUser(userId), env, now);
+  record.generationUnlimited = enabled;
+  record.updatedAt = now.toISOString();
+  await store.writeUser(userId, record);
+  return record;
+}
+
 export async function getUsageEntitlement(
   userId: string,
   delta: UsageQuotaDelta = {},

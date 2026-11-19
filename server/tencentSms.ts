@@ -68,7 +68,7 @@ export async function sendTencentSmsOtp(
     },
   });
 
-  const response = await client.SendSms({
+  const response = await (client as any).SendSms({
     SmsSdkAppId: smsSdkAppId,
     SignName: signName,
     TemplateId: templateId,

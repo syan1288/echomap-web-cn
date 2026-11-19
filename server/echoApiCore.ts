@@ -436,7 +436,7 @@ export async function handleGenerate(
       },
     });
 
-    const extracted = extractInlineImageFromResponse(response as Record<string, unknown>);
+    const extracted = extractInlineImageFromResponse(response as unknown as Record<string, unknown>);
     if ('error' in extracted) {
       logLine('generate_no_image', { reqId, ...extracted.logPayload, error: extracted.error });
       return { status: 500, json: { error: extracted.error } };

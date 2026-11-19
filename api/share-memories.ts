@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const result = buildMemorySharePayload(body);
-  if (!result.ok) {
+  if (result.ok === false) {
     res.status(result.status).json({ error: result.error });
     return;
   }

@@ -76,7 +76,6 @@ export interface EchoApiEnv {
   ECHO_ENTITLEMENTS_STORE?: string;
   ECHO_ENTITLEMENTS_STORE_PATH?: string;
   ECHO_ENTITLEMENTS_TABLE?: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
   ECHO_FREE_STARTER_GENERATIONS?: string;
   ECHO_FREE_MONTHLY_GENERATIONS?: string;
   ECHO_PLUS_MONTHLY_GENERATIONS?: string;
@@ -854,6 +853,7 @@ function pickBestNominatimHit(
     importance?: number;
     class?: string;
     type?: string;
+    boundingbox?: [string, string, string, string];
   }>,
   rawQuery: string
 ): (typeof data)[0] | null {
@@ -1190,7 +1190,7 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
         }
 
         const result = buildMemorySharePayload(body);
-        if (!result.ok) {
+        if (result.ok === false) {
           res.statusCode = result.status;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ error: result.error }));
@@ -1631,14 +1631,14 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
             });
 
           let response = await requestImage(stitchedPrompt);
-          let extracted = extractInlineImageFromResponse(response as Record<string, unknown>);
+          let extracted = extractInlineImageFromResponse(response as unknown as Record<string, unknown>);
           if ('error' in extracted) {
             const retryPrompt =
               `${stitchedPrompt}\n\n` +
               'Output requirement: return only one generated image. Do not return explanation text. ' +
               'If you cannot comply, still return an image attempt instead of text.';
             response = await requestImage(retryPrompt);
-            extracted = extractInlineImageFromResponse(response as Record<string, unknown>);
+            extracted = extractInlineImageFromResponse(response as unknown as Record<string, unknown>);
           }
           if ('error' in extracted) {
             const detail = describeProviderError(provider, new Error(extracted.error));
