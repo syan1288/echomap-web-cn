@@ -42,7 +42,7 @@ export const BuildingStyleEditorModal: React.FC<BuildingStyleEditorModalProps> =
         style={{ fontFamily: '"Roboto Mono", ui-monospace, monospace' }}
       >
         <div className="space-y-5 p-6 md:p-8">
-          <label className="block text-sm text-[#555]">
+          <label className="block text-left text-sm text-[#555]">
             <span className="mb-2 block">风格名称</span>
             <input
               className="h-11 w-full border border-black bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#0053D4]/35"
@@ -51,23 +51,23 @@ export const BuildingStyleEditorModal: React.FC<BuildingStyleEditorModalProps> =
               onChange={(event) => setName(event.target.value)}
             />
           </label>
-          <label className="block text-sm text-[#555]">
-            <span className="mb-2 block">Prompt</span>
-            <div className="flex items-start gap-3">
-              <textarea
-                className="min-h-[190px] min-w-0 flex-1 resize-y border border-black bg-white px-3 py-3 text-sm leading-6 outline-none focus:ring-2 focus:ring-[#0053D4]/35"
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-              />
+          <label className="block text-left text-sm text-[#555]">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="block">Prompt</span>
               <button
                 type="button"
-                className="mt-2 flex h-8 w-8 shrink-0 items-center justify-center border-0 bg-transparent text-lg text-[#555] hover:bg-black/5"
+                className="flex h-7 w-7 shrink-0 items-center justify-center border-0 bg-transparent text-lg text-[#555] hover:bg-black/5"
                 aria-label="恢复默认 Prompt"
                 onClick={() => setPrompt(style.prompt)}
               >
                 ↻
               </button>
             </div>
+            <textarea
+              className="min-h-[190px] w-full resize-y border border-black bg-white px-3 py-3 text-sm leading-6 outline-none focus:ring-2 focus:ring-[#0053D4]/35"
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+            />
           </label>
         </div>
         <div className="flex items-center justify-between border-t border-black/20 px-6 py-4 md:px-8">
