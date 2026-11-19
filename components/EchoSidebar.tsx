@@ -111,12 +111,6 @@ const IconEdit: React.FC = () => (
   </svg>
 );
 
-const IconPhone: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M8.2 4.5 6.1 6.6c-.5.5-.6 1.2-.3 1.8a24.4 24.4 0 0 0 9.8 9.8c.6.3 1.3.2 1.8-.3l2.1-2.1-3.2-3.2-1.7 1.7a13.5 13.5 0 0 1-4.8-4.8l1.7-1.7-3.3-3.1Z" />
-  </svg>
-);
-
 const GeminiBrandIcon: React.FC = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
     <defs>
@@ -233,8 +227,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     if (typeof window === 'undefined') return accountPhone;
     return window.localStorage.getItem(`${profileStorageKey}:phone`) ?? accountPhone;
   });
-  const [draftPhone, setDraftPhone] = React.useState(profilePhone);
-  const [editingPhone, setEditingPhone] = React.useState(false);
   const [avatarSrc, setAvatarSrc] = React.useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return window.localStorage.getItem(`${profileStorageKey}:avatar`);
@@ -247,10 +239,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     setAccountName(window.localStorage.getItem(`${profileStorageKey}:name`) || defaultAccountName(accountEmail, accountPhone, user?.user_metadata));
     setProfilePhone(window.localStorage.getItem(`${profileStorageKey}:phone`) ?? accountPhone);
   }, [accountEmail, accountPhone, profileStorageKey, user?.user_metadata]);
-
-  React.useEffect(() => {
-    setDraftPhone(profilePhone);
-  }, [profilePhone]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -273,13 +261,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     };
     reader.readAsDataURL(file);
   }, [profileStorageKey]);
-
-  const saveProfilePhone = React.useCallback(() => {
-    const next = draftPhone.trim();
-    setProfilePhone(next);
-    setDraftPhone(next);
-    setEditingPhone(false);
-  }, [draftPhone]);
 
   const createPaymentOrder = React.useCallback(async (planId: PaidPlanId, paymentWindow?: Window | null) => {
     setPaymentError(null);
@@ -483,38 +464,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                 event.currentTarget.value = '';
               }}
             />
-            <div className="space-y-1 border-t border-black/10 px-1 pt-1.5">
-              <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[#333]">
-                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[#111]"><IconPhone /></span>
-                {editingPhone ? (
-                  <input
-                    className="min-w-0 flex-1 border-0 border-b border-black/25 bg-transparent px-0 py-0.5 text-[11px] text-[#333] outline-none"
-                    type="tel"
-                    value={draftPhone}
-                    autoFocus
-                    onChange={(event) => setDraftPhone(event.target.value)}
-                    onBlur={saveProfilePhone}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') saveProfilePhone();
-                      if (event.key === 'Escape') {
-                        setDraftPhone(profilePhone);
-                        setEditingPhone(false);
-                      }
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-1.5 border-0 bg-transparent p-0 text-left text-[11px] text-[#333]"
-                    onClick={() => setEditingPhone(true)}
-                    aria-label="Bind phone number"
-                  >
-                    <span className="min-w-0 flex-1 truncate">{profilePhone || '-'}</span>
-                    <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[#8a8a8a]"><IconEdit /></span>
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         )}
 
