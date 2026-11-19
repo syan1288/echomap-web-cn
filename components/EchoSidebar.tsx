@@ -5,6 +5,9 @@ import { SidebarNoiseCanvas } from './SidebarNoiseCanvas';
 import { useAuth } from '../context/AuthContext';
 import { useLocalization } from '../context/LocalizationContext';
 import { apiUrl } from '../lib/apiBase';
+import { BuildingStyleEditorModal } from './BuildingStyleEditorModal';
+import { useBuildingStyles } from '../hooks/useBuildingStyles';
+import type { BuildingStyleDefinition } from '../shared/domain/building-style/buildingStyle';
 
 /** 2.1.1 品牌蓝（echo-map-unified-description.md） */
 const BRAND_BLUE = '#0053D4';
@@ -16,7 +19,7 @@ const PANEL_STACK = `
 `;
 
 type ImageProvider = 'jimeng' | 'gemini';
-type AvatarSubmenu = 'account' | 'version' | 'model' | null;
+type AvatarSubmenu = 'account' | 'version' | 'model' | 'style' | null;
 type PaidPlanId = 'plus' | 'pro';
 
 type PaymentOrder = {
@@ -88,6 +91,13 @@ const IconSparkles: React.FC = () => (
   </svg>
 );
 
+const IconStyle: React.FC = () => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M12 3v18M3 12h18" />
+    <path d="m5.6 5.6 12.8 12.8M18.4 5.6 5.6 18.4" />
+  </svg>
+);
+
 const IconChevronRight: React.FC = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="m9 18 6-6-6-6" />
@@ -98,13 +108,6 @@ const IconEdit: React.FC = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M12 20h9" />
     <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-  </svg>
-);
-
-const IconEmail: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <rect x="4" y="6" width="16" height="12" rx="1.8" />
-    <path d="m5 7 7 6 7-6" />
   </svg>
 );
 
@@ -208,6 +211,8 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
   const [activeSubmenu, setActiveSubmenu] = React.useState<AvatarSubmenu>(null);
   const [pendingPaymentPlan, setPendingPaymentPlan] = React.useState<PaidPlanId | null>(null);
   const [paymentError, setPaymentError] = React.useState<string | null>(null);
+  const [editingStyle, setEditingStyle] = React.useState<BuildingStyleDefinition | null>(null);
+  const [creatingStyle, setCreatingStyle] = React.useState(false);
   const [menuAnchorRect, setMenuAnchorRect] = React.useState<DOMRect | null>(null);
   const [collapsed, setCollapsed] = React.useState(false);
   const avatarButtonRef = React.useRef<HTMLButtonElement | null>(null);
@@ -224,8 +229,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     if (typeof window === 'undefined') return defaultAccountName(accountEmail, accountPhone, user?.user_metadata);
     return window.localStorage.getItem(`${profileStorageKey}:name`) || defaultAccountName(accountEmail, accountPhone, user?.user_metadata);
   });
-  const [draftAccountName, setDraftAccountName] = React.useState(accountName);
-  const [editingAccountName, setEditingAccountName] = React.useState(false);
   const [profilePhone, setProfilePhone] = React.useState(() => {
     if (typeof window === 'undefined') return accountPhone;
     return window.localStorage.getItem(`${profileStorageKey}:phone`) ?? accountPhone;
@@ -236,6 +239,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     if (typeof window === 'undefined') return null;
     return window.localStorage.getItem(`${profileStorageKey}:avatar`);
   });
+  const { styles, update, create, remove } = useBuildingStyles();
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -243,10 +247,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     setAccountName(window.localStorage.getItem(`${profileStorageKey}:name`) || defaultAccountName(accountEmail, accountPhone, user?.user_metadata));
     setProfilePhone(window.localStorage.getItem(`${profileStorageKey}:phone`) ?? accountPhone);
   }, [accountEmail, accountPhone, profileStorageKey, user?.user_metadata]);
-
-  React.useEffect(() => {
-    setDraftAccountName(accountName);
-  }, [accountName]);
 
   React.useEffect(() => {
     setDraftPhone(profilePhone);
@@ -273,13 +273,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     };
     reader.readAsDataURL(file);
   }, [profileStorageKey]);
-
-  const saveAccountName = React.useCallback(() => {
-    const next = draftAccountName.trim() || defaultAccountName(accountEmail, accountPhone, user?.user_metadata);
-    setAccountName(next);
-    setDraftAccountName(next);
-    setEditingAccountName(false);
-  }, [accountEmail, accountPhone, draftAccountName, user?.user_metadata]);
 
   const saveProfilePhone = React.useCallback(() => {
     const next = draftPhone.trim();
@@ -425,8 +418,8 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     }
 
     const mainWidth = 176;
-    const submenuWidth = activeSubmenu === 'version' ? 244 : 204;
-    const estimatedMainHeight = 126;
+    const submenuWidth = activeSubmenu === 'version' ? 244 : activeSubmenu === 'style' ? 320 : 204;
+    const estimatedMainHeight = 174;
     const mainLeft = Math.min(Math.max(12, anchorRect.left), window.innerWidth - mainWidth - 12);
     const mainTop = Math.min(Math.max(12, anchorRect.top - estimatedMainHeight - 12), window.innerHeight - estimatedMainHeight - 12);
     const submenuLeft = Math.min(mainLeft + mainWidth + 8, window.innerWidth - submenuWidth - 12);
@@ -475,32 +468,9 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
               </button>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] font-semibold text-[#111]">{t('accountMenu')}</div>
-                {editingAccountName ? (
-                  <input
-                    className="mt-0.5 w-full border-0 border-b border-black/25 bg-transparent px-0 py-0 text-[11px] text-[#555] outline-none"
-                    value={draftAccountName}
-                    autoFocus
-                    onChange={(event) => setDraftAccountName(event.target.value)}
-                    onBlur={saveAccountName}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') saveAccountName();
-                      if (event.key === 'Escape') {
-                        setDraftAccountName(accountName);
-                        setEditingAccountName(false);
-                      }
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="mt-0.5 flex w-full min-w-0 items-center gap-1.5 border-0 bg-transparent p-0 text-left"
-                    onClick={() => setEditingAccountName(true)}
-                    aria-label="Edit account name"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-[#666]">{accountName}</span>
-                    <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[#8a8a8a]"><IconEdit /></span>
-                  </button>
-                )}
+                <div className="mt-0.5 min-w-0 truncate text-[11px] text-[#666]">
+                  {accountEmail || accountName}
+                </div>
               </div>
             </div>
             <input
@@ -514,10 +484,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
               }}
             />
             <div className="space-y-1 border-t border-black/10 px-1 pt-1.5">
-              <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[#333]">
-                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[#111]"><IconEmail /></span>
-                <span className="min-w-0 truncate">{accountEmail || '-'}</span>
-              </div>
               <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-[#333]">
                 <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[#111]"><IconPhone /></span>
                 {editingPhone ? (
@@ -613,6 +579,46 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
             })}
           </div>
         )}
+
+        {activeSubmenu === 'style' && (
+          <div className="space-y-1 text-left text-[11px] text-[#111]">
+            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[#777]">
+              {language === 'zh' ? '生图风格' : 'Image style'}
+            </div>
+            {styles.map((style) => (
+              <button
+                key={style.id}
+                type="button"
+                className="flex min-h-[30px] w-full items-center gap-2 rounded-[5px] border border-transparent bg-transparent px-2 py-1 text-left text-[11px] text-[#111] transition-colors hover:border-[#1687ff] hover:bg-[#c6ddff]/65"
+                onClick={() => {
+                  setEditingStyle(style);
+                  setCreatingStyle(false);
+                  closeAvatarMenu();
+                }}
+              >
+                <span className="min-w-0 flex-1 truncate">{style.name}</span>
+                <IconEdit />
+              </button>
+            ))}
+            <button
+              type="button"
+              className="mt-1 flex min-h-[30px] w-full items-center gap-2 border-t border-black/10 bg-transparent px-2 pt-2 text-left text-[11px] text-[#0053D4] hover:underline"
+              onClick={() => {
+                setEditingStyle({
+                  id: 'custom-draft',
+                  name: language === 'zh' ? '自定义风格' : 'Custom style',
+                  prompt: '',
+                  builtin: false,
+                });
+                setCreatingStyle(true);
+                closeAvatarMenu();
+              }}
+            >
+              <span className="text-[15px] leading-none">＋</span>
+              <span>{language === 'zh' ? '新建自定义风格' : 'New custom style'}</span>
+            </button>
+          </div>
+        )}
       </div>
     ) : null;
 
@@ -626,6 +632,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
           {([
             ['account', <IconAccount />, t('accountMenu')],
             ['version', <IconPlan />, t('versionPlanMenu')],
+            ['style', <IconStyle />, language === 'zh' ? '风格' : 'Style'],
             ['model', <IconSparkles />, t('modelMenu')],
           ] as const).map(([id, icon, label]) => (
             <button
@@ -812,6 +819,31 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
         </div>
       )}
       {avatarMenu}
+      <BuildingStyleEditorModal
+        open={Boolean(editingStyle)}
+        style={editingStyle}
+        onCancel={() => {
+          setEditingStyle(null);
+          setCreatingStyle(false);
+        }}
+        onSave={(name, prompt) => {
+          if (!editingStyle) return;
+          if (creatingStyle) {
+            create(name, prompt);
+          } else {
+            update({ ...editingStyle, name, prompt });
+          }
+          setEditingStyle(null);
+          setCreatingStyle(false);
+        }}
+        onDelete={() => {
+          if (!editingStyle || creatingStyle) return;
+          if (window.confirm(language === 'zh' ? '删除这个自定义风格？' : 'Delete this custom style?')) {
+            remove(editingStyle.id);
+            setEditingStyle(null);
+          }
+        }}
+      />
     </aside>
   );
 };

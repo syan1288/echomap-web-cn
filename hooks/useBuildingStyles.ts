@@ -12,6 +12,8 @@ import {
   type BuildingStyleDefinition,
 } from '../shared/domain/building-style/buildingStyle';
 
+const BUILDING_STYLES_UPDATED_EVENT = 'echomap:building-styles:updated';
+
 function getStorage(): Storage | null {
   return typeof window === 'undefined' ? null : window.localStorage;
 }
@@ -25,10 +27,20 @@ export function useBuildingStyles() {
     setStyles(loadBuildingStyles(getStorage(), userId));
   }, [userId]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const refresh = () => setStyles(loadBuildingStyles(window.localStorage, userId));
+    window.addEventListener(BUILDING_STYLES_UPDATED_EVENT, refresh);
+    return () => window.removeEventListener(BUILDING_STYLES_UPDATED_EVENT, refresh);
+  }, [userId]);
+
   const commit = useCallback(
     (next: BuildingStyleDefinition[]) => {
       setStyles(next);
       saveBuildingStyles(getStorage(), next, userId);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event(BUILDING_STYLES_UPDATED_EVENT));
+      }
     },
     [userId]
   );
