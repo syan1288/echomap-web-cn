@@ -27,6 +27,52 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+// Vercel Serverless Functions reject request bodies around 4.5 MB. JSON
+// Base64 adds roughly 33%, so keep the encoded source comfortably below that
+// limit while retaining enough resolution for building recognition.
+const MAX_GENERATION_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_GENERATION_IMAGE_DIMENSION = 2048;
+
+const prepareImageForGeneration = async (file: File): Promise<File> => {
+  if (file.size <= MAX_GENERATION_IMAGE_BYTES && file.type !== 'image/png') return file;
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const source = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Unable to read the selected image.'));
+      image.src = objectUrl;
+    });
+    const scale = Math.min(
+      1,
+      MAX_GENERATION_IMAGE_DIMENSION / Math.max(source.naturalWidth, source.naturalHeight)
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(source.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(source.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Unable to prepare the selected image.');
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
+
+    let quality = 0.86;
+    let blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    while (blob && blob.size > MAX_GENERATION_IMAGE_BYTES && quality > 0.58) {
+      quality -= 0.08;
+      blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    }
+    if (!blob || blob.size > MAX_GENERATION_IMAGE_BYTES) {
+      throw new Error('The selected image is too large to send. Please choose a smaller photo.');
+    }
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, '') || 'upload'}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: file.lastModified,
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+};
+
 export interface GenerateImageOptions {
   /** M01 或 geocode 得到的建筑名，用于补充知名地标信息 */
   buildingName?: string;
@@ -76,7 +122,8 @@ export const generateImageWithPrompt = async (
     throw new Error(sizeCheck.message);
   }
 
-  const imageBase64 = await fileToBase64(imageFile);
+  const generationFile = await prepareImageForGeneration(imageFile);
+  const imageBase64 = await fileToBase64(generationFile);
   const jimengImageUrls =
     options.preferredModel === 'jimeng' ? [await uploadImageAndCreateJimengUrl(imageFile)] : undefined;
   const session = supabase ? (await supabase.auth.getSession()).data.session : null;
@@ -90,7 +137,7 @@ export const generateImageWithPrompt = async (
     body: JSON.stringify({
       imageBase64,
       imageUrls: jimengImageUrls,
-      mimeType: imageFile.type || 'image/jpeg',
+      mimeType: generationFile.type || 'image/jpeg',
       buildingName: options.buildingName?.trim() || undefined,
       userPrompt: options.userPrompt?.trim() || undefined,
       buildingStyle: options.buildingStyle || undefined,
@@ -120,6 +167,9 @@ export const generateImageWithPrompt = async (
         data.error ||
           'POST /api/generate returned 404. Start the app with `npm run dev` or `npm run preview` in echomap-web (static file hosting has no API unless you deploy a backend).'
       );
+    }
+    if (res.status === 413) {
+      throw new Error('图片太大，已超过服务端请求限制。请换一张较小的照片。');
     }
     const message = data.error || `Generate failed (${res.status})`;
     throw new Error(data.requestId ? `${message} (Request ID: ${data.requestId})` : message);

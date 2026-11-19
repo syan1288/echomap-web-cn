@@ -45,7 +45,9 @@ type EchoApiEnv = {
   ECHO_PREFER_API_KEY?: string;
 };
 
-const MAX_JSON_BODY_CHARS = 22 * 1024 * 1024;
+// Keep direct callers aligned with Vercel's smaller serverless request-body
+// limit. The web client compresses images to leave room for JSON/Base64.
+const MAX_JSON_BODY_CHARS = 4 * 1024 * 1024;
 const BUILDING_STYLE_IDS = ['flat', 'pixel', 'ink', 'healing'] as const;
 type BuildingStyleId = (typeof BUILDING_STYLE_IDS)[number];
 const DEFAULT_BUILDING_STYLE: BuildingStyleId = 'flat';
