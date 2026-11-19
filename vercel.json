@@ -2,7 +2,24 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "source": "/api/payments/create-order",
+      "destination": "/api/payments-create-order"
+    },
+    {
+      "source": "/api/payments/confirm-order",
+      "destination": "/api/payments-confirm-order"
+    },
+    {
+      "source": "/api/payments/wechat/notify",
+      "destination": "/api/payments-wechat-notify"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
   "functions": {
     "api/generate.ts": {
       "maxDuration": 120,
