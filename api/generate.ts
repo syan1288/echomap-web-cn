@@ -1,15 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Modality } from '@google/genai';
 import path from 'node:path';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { getAuthenticatedUser, type HeaderLike } from '../server/authUser.js';
 import {
   consumeGenerationEntitlement,
   getGenerationEntitlement,
   type GenerationEntitlement,
 } from '../server/entitlements.js';
+import {
+  describeProviderError,
+  getProviderErrorRuntimeInfo,
+} from '../shared/domain/image/providerError.js';
+import { parseGoogleServiceAccountJson } from '../shared/domain/googleServiceAccount.js';
+import {
+  DEFAULT_BUILDING_STYLE_PROMPTS,
+  MAX_STYLE_PROMPT_LENGTH,
+} from '../shared/domain/building-style/buildingStyle.js';
+import { buildJimengPrompt } from '../shared/domain/image/jimengPrompt.js';
+import { uploadJimengInputFromBase64 } from '../server/jimengImageInput.js';
 
 type EchoApiEnv = {
   API_KEY?: string;
@@ -457,7 +466,9 @@ async function requestJimengImageEdit(args: {
   const submitBody = {
     req_key: conf.reqKey,
     image_urls: args.imageUrls.slice(0, 14),
-    prompt: args.prompt,
+    prompt: args.prompt.slice(0, 800),
+    force_single: true,
+    size: conf.size,
     scale: conf.scale,
   };
   const submitText = JSON.stringify(submitBody);
@@ -726,17 +737,8 @@ function isBuildingStyleId(s: string | undefined | null): s is BuildingStyleId {
 function buildEchoImageSystemInstruction(style: BuildingStyleId = DEFAULT_BUILDING_STYLE): string {
   const base =
     '输入照片只作为建筑结构参考，不要保留或复刻原照片画面。仅针对图中主体建筑，创建单体建筑立绘。必须抠出并重绘为一个独立地标建筑资产，构图为干净的等距/3D 视角，建筑主体完整，透明背景或纯白背景，无原照片背景、无地面、无天空、无人物、无车辆、无招牌、无植被、无阴影、无边框，输出 png。整体必须像可收藏的旅行地标建筑插画，而不是照片拼贴、儿童画、玩具、贴纸、Q版摆件或卡通表情。颜色克制，避免高饱和霓虹糖果色，避免幼态、廉价、花哨。';
-  switch (style) {
-    case 'pixel':
-      return `${base} 风格额外约束：像素风必须是真正的像素建筑立绘，边缘清晰，像素块明确，限制色盘，避免平滑渐变、模糊、发光特效和手游儿童皮肤感。`;
-    case 'ink':
-      return `${base} 风格额外约束：水墨风必须保留建筑结构识别度，以白描线稿和低饱和墨色/淡彩为主，留白克制，避免鲜艳儿童插画配色。`;
-    case 'healing':
-      return `${base} 风格额外约束：治愈绘本风应安静、成熟、柔和，像旅行随笔插画，不要幼儿园绘本、卡通吉祥物或高饱和可爱风。`;
-    case 'flat':
-    default:
-      return `${base} 风格额外约束：扁平插画风应更像编辑插画/品牌插画，几何块面清晰，颜色克制，不要儿童简笔画、廉价卡通或高饱和贴纸风。`;
-  }
+  void style;
+  return base;
 }
 
 function buildInitialUserPrompt(buildingName?: string): string {
@@ -757,13 +759,11 @@ function buildUserStyleReminder(style: BuildingStyleId): string {
   }
 }
 
-function buildInitialUserPromptWithStyle(buildingName: string | undefined, style: BuildingStyleId): string {
-  const trimmed = buildingName?.trim();
-  const extractionInstruction =
-    '请把输入照片中的主体建筑提取为独立建筑资产；输入照片只用于识别建筑外形和细节，输出画面不能包含原照片背景、人物、天空、地面、游客、车辆、招牌或场景拼贴。';
-  return trimmed
-    ? `建筑名称参考：${trimmed}。${extractionInstruction} 请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`
-    : `${extractionInstruction} 请保留原建筑的核心轮廓、体块、屋顶和可识别地标特征，只重绘风格，不要改造成完全陌生的幻想建筑。风格要求：${buildUserStyleReminder(style)}`;
+function resolveStylePrompt(style: BuildingStyleId, customPrompt?: string): string {
+  const prompt = customPrompt?.trim();
+  return prompt && prompt.length <= MAX_STYLE_PROMPT_LENGTH
+    ? prompt
+    : DEFAULT_BUILDING_STYLE_PROMPTS[style];
 }
 
 function buildInitialUserPromptWithStyle(
@@ -787,7 +787,7 @@ function buildEditUserPrompt(
   stylePrompt?: string
 ): string {
   const extra = buildingName?.trim() ? ` 建筑名称参考：${buildingName.trim()}。` : '';
-  return `${editInstruction.trim()}${extra} 输入照片只作为建筑结构参考，输出不能包含原照片背景、人物、天空、地面、游客、车辆、招牌或场景拼贴。请保留原建筑的可识别地标特征，只在现有结构上调整。风格要求：${buildUserStyleReminder(style)}`.trim();
+  return `${editInstruction.trim()}${extra} 输入照片只作为建筑结构参考，输出不能包含原照片背景、人物、天空、地面、游客、车辆、招牌或场景拼贴。请保留原建筑的可识别地标特征，只在现有结构上调整。风格要求：${resolveStylePrompt(style, stylePrompt)}`.trim();
 }
 
 function extractInlineImageFromResponse(response: {
@@ -877,9 +877,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  if (body.stylePrompt != null && typeof body.stylePrompt !== 'string') {
+    sendJson(res, 400, { error: 'stylePrompt must be a string', code: 'STYLE_PROMPT_INVALID' });
+    return;
+  }
+  if (body.stylePrompt && body.stylePrompt.trim().length > MAX_STYLE_PROMPT_LENGTH) {
+    sendJson(res, 400, {
+      error: `stylePrompt is too long (maximum ${MAX_STYLE_PROMPT_LENGTH} characters)`,
+      code: 'STYLE_PROMPT_TOO_LONG',
+    });
+    return;
+  }
+
+  const requestId = randomUUID();
+  res.setHeader('X-Echo-Request-Id', requestId);
   const quotaUserId = await authorizeGeneration(req, res);
   if (isQuotaEnabled() && !quotaUserId) return;
 
+  let providerStage = 'provider-setup';
   try {
     const env = envFromProcess();
     const wantsJimeng = body.preferredModel === 'jimeng';
@@ -924,6 +939,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         mimeType: body.mimeType || 'image/jpeg',
         prompt: stitchedPrompt,
       });
+      providerStage = 'quota-consume';
       const entitlement = await consumeQuotaForSuccess(quotaUserId);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
@@ -957,6 +973,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           providerStage = stage;
         },
       });
+      providerStage = 'quota-consume';
       const entitlement = await consumeQuotaForSuccess(quotaUserId);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
@@ -1028,7 +1045,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.statusCode = 'error' in extracted ? 500 : 200;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
-    const entitlement = 'error' in extracted ? null : await consumeQuotaForSuccess(quotaUserId);
+    let entitlement: GenerationEntitlement | null = null;
+    if (!('error' in extracted)) {
+      providerStage = 'quota-consume';
+      entitlement = await consumeQuotaForSuccess(quotaUserId);
+    }
     res.end(
       JSON.stringify(
         'error' in extracted

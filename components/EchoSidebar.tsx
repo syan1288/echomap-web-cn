@@ -15,7 +15,7 @@ const PANEL_STACK = `
   ${PANEL_BG}
 `;
 
-type ImageProvider = 'jimeng' | 'gemini' | 'chatgpt-image';
+type ImageProvider = 'jimeng' | 'gemini';
 type AvatarSubmenu = 'account' | 'version' | 'model' | null;
 type PaidPlanId = 'plus' | 'pro';
 
@@ -31,7 +31,6 @@ type PaymentOrder = {
 const MODEL_OPTIONS = [
   { id: 'jimeng', label: '即梦' },
   { id: 'gemini', label: 'Gemini' },
-  { id: 'chatgpt-image', label: 'ChatGPT-image-2.0' },
 ] as const;
 
 const MONO_FONT = '"Roboto Mono", ui-monospace, monospace';
@@ -439,7 +438,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
 
     const modelIcon = (id: ImageProvider) => {
       if (id === 'gemini') return <GeminiBrandIcon />;
-      if (id === 'chatgpt-image') return <OpenAIBrandIcon />;
       return <JimengBrandIcon />;
     };
     const planRows = [
@@ -476,7 +474,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                 {renderAvatarContent()}
               </button>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[12px] font-semibold text-[#111]">Account</div>
+                <div className="truncate text-[12px] font-semibold text-[#111]">{t('accountMenu')}</div>
                 {editingAccountName ? (
                   <input
                     className="mt-0.5 w-full border-0 border-b border-black/25 bg-transparent px-0 py-0 text-[11px] text-[#555] outline-none"
@@ -605,6 +603,11 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                 >
                   <span className={iconSlotClass}>{modelIcon(item.id)}</span>
                   <span className="min-w-0 truncate">{item.label}</span>
+                  {disabled && (
+                    <span className="ml-auto shrink-0 text-[10px] text-[#888]">
+                      {t('providerNotConfigured')}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -621,9 +624,9 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
           onMouseDown={(event) => event.stopPropagation()}
         >
           {([
-            ['account', <IconAccount />, 'Account'],
-            ['version', <IconPlan />, 'Version Plan'],
-            ['model', <IconSparkles />, 'Model'],
+            ['account', <IconAccount />, t('accountMenu')],
+            ['version', <IconPlan />, t('versionPlanMenu')],
+            ['model', <IconSparkles />, t('modelMenu')],
           ] as const).map(([id, icon, label]) => (
             <button
               key={id}
@@ -651,7 +654,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
             className={`${rowClass} mt-0.5`}
           >
             <span className={iconSlotClass}><IconLogout /></span>
-            <span className="min-w-0 flex-1 truncate">Log out</span>
+            <span className="min-w-0 flex-1 truncate">{t('authSignOut')}</span>
           </button>
         </div>
         {submenuContent}

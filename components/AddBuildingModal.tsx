@@ -5,6 +5,7 @@ import {
   DEFAULT_BUILDING_STYLE,
   type BuildingStyleId,
 } from '../shared/domain/building-style/buildingStyle';
+import { useBuildingStyles } from '../hooks/useBuildingStyles';
 import { isNativeApp, pickImageAsFile } from '../lib/mobile';
 
 const STYLE_I18N_KEY: Record<BuildingStyleId, string> = {
@@ -243,7 +244,8 @@ export const AddBuildingModal: React.FC<AddBuildingModalProps> = ({ open, onClos
               disabled={!canSave}
               onClick={() => {
                 if (!file || !buildingName.trim()) return;
-                onSave(file, buildingName.trim(), buildingStyle);
+                const selectedStyle = styles.find((style) => style.id === buildingStyle) ?? styles[0];
+                onSave(file, buildingName.trim(), selectedStyle.id, selectedStyle.prompt);
                 reset();
                 onClose();
               }}

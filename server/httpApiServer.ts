@@ -7,6 +7,7 @@ import geocodeHandler from '../api/geocode.js';
 import generationQuotaHandler from '../api/generation-quota.js';
 import healthHandler from '../api/echo-health.js';
 import paymentsCreateOrderHandler from '../api/payments-create-order.js';
+import paymentsConfirmOrderHandler from '../api/payments-confirm-order.js';
 import paymentsWechatNotifyHandler from '../api/payments-wechat-notify.js';
 import shareMemoriesHandler from '../api/share-memories.js';
 import usageQuotaHandler from '../api/usage-quota.js';
@@ -62,6 +63,7 @@ const routes = new Map<string, Handler>([
   ['/api/geocode', geocodeHandler],
   ['/api/echo-health', healthHandler],
   ['/api/payments/create-order', paymentsCreateOrderHandler],
+  ['/api/payments/confirm-order', paymentsConfirmOrderHandler],
   ['/api/payments/wechat/notify', paymentsWechatNotifyHandler],
   ['/api/share-memories', shareMemoriesHandler],
   ['/api/usage-quota', usageQuotaHandler],

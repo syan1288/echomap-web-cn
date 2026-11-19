@@ -13,7 +13,19 @@ import { buildMemorySharePayload } from './lib/memorySharePayload';
 import { getAuthenticatedUser, type HeaderLike } from './server/authUser';
 import { handleGenerationQuotaRequest } from './server/generationQuotaApiCore';
 import { handleUsageQuotaRequest } from './server/usageQuotaApiCore';
-import { createPaymentOrder, listPaymentPlans } from './server/paymentOrders';
+import {
+  confirmPaymentOrder,
+  createPaymentOrder,
+  isPaymentAdminAuthorized,
+  listPaymentPlans,
+} from './server/paymentOrders';
+import { handleWechatPayNotify } from './server/wechatPayNotify';
+import { handleSupabaseSendSmsHook } from './server/supabaseSmsHook';
+import { isGeminiProviderAvailable } from './shared/domain/image/providerAvailability';
+import { describeProviderError } from './shared/domain/image/providerError';
+import { buildJimengPrompt } from './shared/domain/image/jimengPrompt';
+import { DEFAULT_BUILDING_STYLE_PROMPTS } from './shared/domain/building-style/buildingStyle';
+import { uploadJimengInputFromBase64 } from './server/jimengImageInput';
 import {
   consumeGenerationEntitlement,
   getGenerationEntitlement,
@@ -57,6 +69,7 @@ export interface EchoApiEnv {
   ECHO_PREFER_API_KEY?: string;
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
   VITE_SUPABASE_URL?: string;
   VITE_SUPABASE_ANON_KEY?: string;
   ECHO_GENERATION_QUOTA_ENABLED?: string;
@@ -79,6 +92,38 @@ export interface EchoApiEnv {
   ECHO_PRO_LANDMARK_LIMIT?: string;
   ECHO_PRO_PHOTO_LIMIT?: string;
   ECHO_PRO_STORAGE_BYTES?: string;
+  ECHO_PAYMENT_PROVIDER?: string;
+  ECHO_PAYMENT_ADMIN_KEY?: string;
+  ECHO_PAYMENT_ORDERS_PATH?: string;
+  ECHO_PLUS_PAYMENT_URL?: string;
+  ECHO_PRO_PAYMENT_URL?: string;
+  ECHO_PLUS_PAYMENT_INSTRUCTIONS?: string;
+  ECHO_PRO_PAYMENT_INSTRUCTIONS?: string;
+  ECHO_PLUS_PAYMENT_AMOUNT_CNY?: string;
+  ECHO_PRO_PAYMENT_AMOUNT_CNY?: string;
+  ECHO_PLUS_PAYMENT_CREDITS?: string;
+  ECHO_PRO_PAYMENT_CREDITS?: string;
+  WECHAT_PAY_APPID?: string;
+  WECHAT_PAY_MCHID?: string;
+  WECHAT_PAY_MERCHANT_SERIAL_NO?: string;
+  WECHAT_PAY_MERCHANT_PRIVATE_KEY?: string;
+  WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH?: string;
+  WECHAT_PAY_NOTIFY_URL?: string;
+  WECHAT_PAY_API_V3_KEY?: string;
+  WECHAT_PAY_PLATFORM_PUBLIC_KEY?: string;
+  WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH?: string;
+  WECHAT_PAY_PLATFORM_SERIAL_NO?: string;
+  SUPABASE_SEND_SMS_HOOK_SECRET?: string;
+  TENCENTCLOUD_SECRET_ID?: string;
+  TENCENTCLOUD_SECRET_KEY?: string;
+  TENCENT_SMS_REGION?: string;
+  TENCENT_SMS_ENDPOINT?: string;
+  TENCENT_SMS_SDK_APP_ID?: string;
+  TENCENT_SMS_SIGN_NAME?: string;
+  TENCENT_SMS_TEMPLATE_ID?: string;
+  TENCENT_SMS_TEMPLATE_PARAMS?: string;
+  TENCENT_SMS_OTP_TTL_MINUTES?: string;
+  TENCENT_SMS_SESSION_PREFIX?: string;
 }
 
 type GeminiTokenProbe = {
@@ -551,7 +596,9 @@ async function requestJimengImageEdit(args: {
   const submitBody = {
     req_key: conf.reqKey,
     image_urls: args.imageUrls.slice(0, 14),
-    prompt: args.prompt,
+    prompt: args.prompt.slice(0, 800),
+    force_single: true,
+    size: conf.size,
     scale: conf.scale,
   };
   const submitText = JSON.stringify(submitBody);
@@ -994,6 +1041,7 @@ function extractInlineImageFromResponse(response: {
  * Dev / preview：
  * - POST /api/generate → Google Gemini（Vertex 或 GEMINI_API_KEY）
  * - POST /api/geocode → 优先高德 Web 服务，其次回退到 Nominatim / Open-Meteo
+ * - POST /api/auth/send-sms-hook → Supabase Send SMS Hook（腾讯云短信）
  * - POST /api/share-memories → 生成系统分享 / 微信朋友圈 / 小红书分享 payload
  * - POST /api/usage-quota → 服务端保存容量配额
  * - GET  /api/echo-health → 检查本地 API 与生成凭证是否就绪
@@ -1092,6 +1140,33 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
 
       if (req.method !== 'POST') {
         next();
+        return;
+      }
+
+      if (pathname === '/api/auth/send-sms-hook') {
+        let raw = '';
+        try {
+          raw = await readBody(req);
+        } catch {
+          res.statusCode = 413;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              error: {
+                http_code: 413,
+                message: 'payload too large',
+              },
+            })
+          );
+          return;
+        }
+
+        const result = await handleSupabaseSendSmsHook(raw, req.headers as HeaderLike, env);
+        res.statusCode = result.status;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(JSON.stringify(result.body));
+        logLine('send_sms_hook_result', { status: result.status });
         return;
       }
 
@@ -1246,6 +1321,120 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
           res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'unable to create order' }));
+        }
+        return;
+      }
+
+      if (pathname === '/api/payments/confirm-order') {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'method not allowed' }));
+          return;
+        }
+
+        if (!isPaymentAdminAuthorized(req.headers as HeaderLike, env)) {
+          const configured = Boolean(env.ECHO_PAYMENT_ADMIN_KEY?.trim());
+          res.statusCode = configured ? 401 : 503;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            error: configured ? 'payment admin authorization required' : 'payment admin key is not configured',
+            code: configured ? 'PAYMENT_ADMIN_UNAUTHORIZED' : 'PAYMENT_ADMIN_NOT_CONFIGURED',
+          }));
+          return;
+        }
+
+        let raw = '';
+        try {
+          raw = await readBody(req);
+        } catch {
+          res.statusCode = 413;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'payload too large' }));
+          return;
+        }
+
+        let body: Record<string, unknown> = {};
+        try {
+          body = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'invalid JSON body' }));
+          return;
+        }
+
+        const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
+        if (!orderId) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'orderId is required' }));
+          return;
+        }
+
+        try {
+          const order = await confirmPaymentOrder(
+            {
+              orderId,
+              amountFen: typeof body.amountFen === 'number' ? body.amountFen : undefined,
+              providerTransactionId:
+                typeof body.providerTransactionId === 'string' ? body.providerTransactionId.trim() : null,
+            },
+            env
+          );
+          const entitlement = await getGenerationEntitlement(order.userId, env);
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ order, entitlement }));
+        } catch (error) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'unable to confirm payment order' }));
+        }
+        return;
+      }
+
+      if (pathname === '/api/payments/wechat/notify') {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'method not allowed' }));
+          return;
+        }
+
+        let raw = '';
+        try {
+          raw = await readBody(req);
+        } catch {
+          res.statusCode = 413;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'payload too large' }));
+          return;
+        }
+
+        try {
+          const result = await handleWechatPayNotify(
+            {
+              headers: req.headers as Record<string, string | string[] | undefined>,
+              rawBody: raw,
+            },
+            env
+          );
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify(result));
+        } catch (error) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(
+            JSON.stringify({
+              code: 'FAIL',
+              message: error instanceof Error ? error.message : 'unable to handle WeChat Pay notification',
+            })
+          );
         }
         return;
       }

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { grantExtraCredits, type EntitlementEnv } from './entitlements.js';
+import { getBearerToken, type HeaderLike } from './authUser.js';
 import { createWechatNativePayment, isWechatNativePaymentConfigured, type WechatPayNativeEnv } from './wechatPayNative.js';
 
 export type PaymentPlanId = 'plus' | 'pro';
@@ -8,6 +9,7 @@ export type PaymentProvider = 'manual' | 'wechat_native';
 
 export type PaymentEnv = EntitlementEnv & WechatPayNativeEnv & {
   ECHO_PAYMENT_PROVIDER?: string;
+  ECHO_PAYMENT_ADMIN_KEY?: string;
   ECHO_PAYMENT_ORDERS_PATH?: string;
   ECHO_PLUS_PAYMENT_URL?: string;
   ECHO_PRO_PAYMENT_URL?: string;
@@ -18,6 +20,19 @@ export type PaymentEnv = EntitlementEnv & WechatPayNativeEnv & {
   ECHO_PLUS_PAYMENT_CREDITS?: string;
   ECHO_PRO_PAYMENT_CREDITS?: string;
 };
+
+export function isPaymentAdminAuthorized(
+  headers: HeaderLike,
+  env: PaymentEnv = process.env,
+): boolean {
+  const expected = env.ECHO_PAYMENT_ADMIN_KEY?.trim();
+  if (!expected) return false;
+
+  const rawHeader = headers['x-echo-payment-admin-key'];
+  const headerKey = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+  const bearerKey = getBearerToken(headers);
+  return headerKey === expected || bearerKey === expected;
+}
 
 export type PaymentPlan = {
   id: PaymentPlanId;
