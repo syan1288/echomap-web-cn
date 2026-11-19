@@ -365,7 +365,7 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
         <div className="flex justify-end mt-8">
           <button
             type="button"
-            className="text-sm text-[#0053D4] underline-offset-2 hover:underline bg-transparent border-0 cursor-pointer"
+            className="text-sm text-[#756F6C] bg-transparent border-0 cursor-pointer"
             style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}
             onClick={onGoToMemories}
           >
