@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { createPortal, useEffect, useState } from 'react';
 import type { BuildingStyleDefinition } from '../shared/domain/building-style/buildingStyle';
 
 interface BuildingStyleEditorModalProps {
@@ -27,7 +27,7 @@ export const BuildingStyleEditorModal: React.FC<BuildingStyleEditorModalProps> =
 
   if (!open || !style) return null;
 
-  return (
+  const modal = (
     <div
       className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 p-4"
       role="dialog"
@@ -95,4 +95,6 @@ export const BuildingStyleEditorModal: React.FC<BuildingStyleEditorModalProps> =
       </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body);
 };
