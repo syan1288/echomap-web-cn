@@ -94,6 +94,7 @@ export type UserEntitlementRecord = {
   monthlyPeriodKey: string;
   monthlyGenerationUsed: number;
   extraCredits: number;
+  generationUnlimited?: boolean;
   landmarkCount: number;
   photoCount: number;
   storageBytesUsed: number;
