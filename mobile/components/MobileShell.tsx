@@ -30,6 +30,7 @@ import { VersionPlanModal } from '../../components/VersionPlanModal';
 import { AddBuildingModal } from '../../components/AddBuildingModal';
 import { BuildingStyleEditorModal } from '../../components/BuildingStyleEditorModal';
 import { MoonFaceAvatar } from '../../components/MoonFaceAvatar';
+import { AuthPanel } from '../../components/AuthPanel';
 import { EchoSidebarBrandIllustration } from '../../components/EchoSidebarBrandIllustration';
 import { SidebarNoiseCanvas } from '../../components/SidebarNoiseCanvas';
 import { deploymentConfig } from '../../lib/deploymentConfig';
@@ -1256,19 +1257,15 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
 }
 
 function LoginScreen() {
-  const { configured, loading, signInWithEmail, signUpWithEmail } = useAuth();
+  const { configured, loading } = useAuth();
   const { language } = useLocalization();
   const copy = MOBILE_COPY[language];
-  const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   if (loading) {
     return (
-      <main className="mobile-shell flex min-h-[100dvh] items-center justify-center bg-[#f9f1e2] px-7 text-center text-[#0053d4]">
-        <p className="m-0 text-[15px]" style={{ fontFamily: MONO_FONT }}>
+      <main className="mobile-shell mobile-home-screen flex min-h-[100dvh] items-center justify-center px-7 text-center text-[#0053d4]">
+        <SidebarNoiseCanvas />
+        <p className="relative z-[1] m-0 text-[15px]" style={{ fontFamily: MONO_FONT }}>
           {copy.authLoading}
         </p>
       </main>
@@ -1277,97 +1274,26 @@ function LoginScreen() {
 
   if (!configured) {
     return (
-      <main className="mobile-shell flex min-h-[100dvh] items-center justify-center bg-[#f9f1e2] px-7 text-center text-[#0053d4]">
-        <p className="m-0 max-w-[20rem] text-[15px]" style={{ fontFamily: MONO_FONT }}>
+      <main className="mobile-shell mobile-home-screen flex min-h-[100dvh] items-center justify-center px-7 text-center text-[#0053d4]">
+        <SidebarNoiseCanvas />
+        <p className="relative z-[1] m-0 max-w-[20rem] text-[15px]" style={{ fontFamily: MONO_FONT }}>
           {copy.supabaseMissing}
         </p>
       </main>
     );
   }
 
-  const submit = async () => {
-    setMessage(null);
-    if (!email.trim() || !password) {
-      setMessage(language === 'zh' ? '请输入邮箱和密码' : 'Please enter email and password');
-      return;
-    }
-    setBusy(true);
-    try {
-      const result =
-        mode === 'signIn'
-          ? await signInWithEmail(email, password)
-          : await signUpWithEmail(email, password);
-      if (!result.ok) {
-        setMessage(result.message);
-      } else if (mode === 'signUp') {
-        setMessage(copy.checkEmail);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
-    <main className="mobile-shell flex min-h-[100dvh] flex-col items-center justify-center bg-[#f9f1e2] px-7 py-10 text-[#0053d4]">
-      <BrandBlock compact />
-      <section className="mt-10 w-full max-w-[360px] rounded-[22px] bg-white/80 p-5 shadow-[0_16px_40px_rgba(90,120,170,0.12)] backdrop-blur">
-        <div className="mb-4 flex gap-2">
-          <button
-            type="button"
-            className={`flex-1 rounded-full border px-3 py-2 text-[13px] font-bold ${mode === 'signIn' ? 'border-[#0053d4] bg-[#0053d4] text-white' : 'border-[#d8e1ef] bg-white text-[#0053d4]'}`}
-            onClick={() => {
-              setMode('signIn');
-              setMessage(null);
-            }}
-          >
-            {copy.signIn}
-          </button>
-          <button
-            type="button"
-            className={`flex-1 rounded-full border px-3 py-2 text-[13px] font-bold ${mode === 'signUp' ? 'border-[#0053d4] bg-[#0053d4] text-white' : 'border-[#d8e1ef] bg-white text-[#0053d4]'}`}
-            onClick={() => {
-              setMode('signUp');
-              setMessage(null);
-            }}
-          >
-            {copy.createAccount}
-          </button>
+    <main className="mobile-shell mobile-home-screen relative flex min-h-[100dvh] flex-col items-center overflow-y-auto px-7 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] text-[#0053d4]">
+      <SidebarNoiseCanvas />
+      <div className="relative z-[1] flex min-h-[calc(100dvh-3.5rem)] w-full max-w-[520px] flex-1 flex-col items-center">
+        <div className="flex w-full flex-1 items-center justify-center">
+          <BrandBlock />
         </div>
-        <div className="space-y-3">
-          <input
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder={copy.email}
-            className="h-11 w-full rounded-full border border-[#d8e1ef] bg-white px-4 text-[14px] text-[#222] outline-none focus:border-[#0053d4]"
-          />
-          <input
-            type="password"
-            autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder={copy.password}
-            className="h-11 w-full rounded-full border border-[#d8e1ef] bg-white px-4 text-[14px] text-[#222] outline-none focus:border-[#0053d4]"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void submit();
-            }}
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void submit()}
-            className="h-11 w-full rounded-full border-0 bg-[#0053d4] px-4 text-[14px] font-bold text-white disabled:opacity-60"
-          >
-            {busy ? '…' : mode === 'signIn' ? copy.enterEchoMap : copy.createAccount}
-          </button>
+        <div className="w-full max-w-[360px] shrink-0">
+          <AuthPanel />
         </div>
-        {message && (
-          <p className="m-0 mt-3 text-center text-[12px] leading-5 text-[#0053d4]" role="status">
-            {message}
-          </p>
-        )}
-      </section>
+      </div>
     </main>
   );
 }

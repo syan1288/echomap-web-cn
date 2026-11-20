@@ -20,5 +20,5 @@ test('web and mobile login use email/password without phone OTP methods', () => 
     );
   }
   assert.match(authPanel, /signInWithEmail/);
-  assert.match(mobileLogin, /signInWithEmail/);
+  assert.match(mobileLogin, /<AuthPanel \/>/);
 });
