@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import echoHealthHandler from '../server/echoHealth.js';
 import { GoogleGenAI, Modality } from '@google/genai';
 import path from 'node:path';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
@@ -823,6 +824,11 @@ function extractInlineImageFromResponse(response: {
 export const config = { maxDuration: 120 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method === 'GET' && req.query.health === '1') {
+    await echoHealthHandler(req, res);
+    return;
+  }
+
   if (handleOptions(req, res)) return;
   applyCors(req, res);
 

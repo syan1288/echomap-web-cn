@@ -12,6 +12,10 @@
       "destination": "/api/payments-confirm-order"
     },
     {
+      "source": "/api/echo-health",
+      "destination": "/api/generate?health=1"
+    },
+    {
       "source": "/api/payments/wechat/notify",
       "destination": "/api/payments-wechat-notify"
     },
