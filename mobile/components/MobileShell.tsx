@@ -196,6 +196,7 @@ const ensureMobileAudioContext = async () => {
 const MOBILE_COPY = {
   en: {
     brandSubtitle: <>Stories and photos of long walks,<br />wrong turns,<br />and everyday discoveries.</>,
+    authLoading: 'Checking session…',
     signIn: 'Sign in',
     createAccount: 'Create account',
     back: 'Back',
@@ -286,6 +287,7 @@ const MOBILE_COPY = {
   },
   zh: {
     brandSubtitle: <>长途散步、<br />转错弯、<br />日常发现的故事和照片。</>,
+    authLoading: '正在检查登录状态…',
     signIn: '登录',
     createAccount: '创建账号',
     back: '返回',
@@ -760,7 +762,7 @@ function formatMobileInitials(identifier: string) {
 }
 
 function defaultAccountName(identifier: string): string {
-  const seed = identifier || 'echomap-user';
+  const seed = identifier || 'local-user';
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) {
     hash = (hash * 31 + seed.charCodeAt(index)) % 10000000000;
@@ -1250,6 +1252,123 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
         {copy.brandSubtitle}
       </p>
     </div>
+  );
+}
+
+function LoginScreen() {
+  const { configured, loading, signInWithEmail, signUpWithEmail } = useAuth();
+  const { language } = useLocalization();
+  const copy = MOBILE_COPY[language];
+  const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (loading) {
+    return (
+      <main className="mobile-shell flex min-h-[100dvh] items-center justify-center bg-[#f9f1e2] px-7 text-center text-[#0053d4]">
+        <p className="m-0 text-[15px]" style={{ fontFamily: MONO_FONT }}>
+          {copy.authLoading}
+        </p>
+      </main>
+    );
+  }
+
+  if (!configured) {
+    return (
+      <main className="mobile-shell flex min-h-[100dvh] items-center justify-center bg-[#f9f1e2] px-7 text-center text-[#0053d4]">
+        <p className="m-0 max-w-[20rem] text-[15px]" style={{ fontFamily: MONO_FONT }}>
+          {copy.supabaseMissing}
+        </p>
+      </main>
+    );
+  }
+
+  const submit = async () => {
+    setMessage(null);
+    if (!email.trim() || !password) {
+      setMessage(language === 'zh' ? '请输入邮箱和密码' : 'Please enter email and password');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result =
+        mode === 'signIn'
+          ? await signInWithEmail(email, password)
+          : await signUpWithEmail(email, password);
+      if (!result.ok) {
+        setMessage(result.message);
+      } else if (mode === 'signUp') {
+        setMessage(copy.checkEmail);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <main className="mobile-shell flex min-h-[100dvh] flex-col items-center justify-center bg-[#f9f1e2] px-7 py-10 text-[#0053d4]">
+      <BrandBlock compact />
+      <section className="mt-10 w-full max-w-[360px] rounded-[22px] bg-white/80 p-5 shadow-[0_16px_40px_rgba(90,120,170,0.12)] backdrop-blur">
+        <div className="mb-4 flex gap-2">
+          <button
+            type="button"
+            className={`flex-1 rounded-full border px-3 py-2 text-[13px] font-bold ${mode === 'signIn' ? 'border-[#0053d4] bg-[#0053d4] text-white' : 'border-[#d8e1ef] bg-white text-[#0053d4]'}`}
+            onClick={() => {
+              setMode('signIn');
+              setMessage(null);
+            }}
+          >
+            {copy.signIn}
+          </button>
+          <button
+            type="button"
+            className={`flex-1 rounded-full border px-3 py-2 text-[13px] font-bold ${mode === 'signUp' ? 'border-[#0053d4] bg-[#0053d4] text-white' : 'border-[#d8e1ef] bg-white text-[#0053d4]'}`}
+            onClick={() => {
+              setMode('signUp');
+              setMessage(null);
+            }}
+          >
+            {copy.createAccount}
+          </button>
+        </div>
+        <div className="space-y-3">
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder={copy.email}
+            className="h-11 w-full rounded-full border border-[#d8e1ef] bg-white px-4 text-[14px] text-[#222] outline-none focus:border-[#0053d4]"
+          />
+          <input
+            type="password"
+            autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder={copy.password}
+            className="h-11 w-full rounded-full border border-[#d8e1ef] bg-white px-4 text-[14px] text-[#222] outline-none focus:border-[#0053d4]"
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void submit();
+            }}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void submit()}
+            className="h-11 w-full rounded-full border-0 bg-[#0053d4] px-4 text-[14px] font-bold text-white disabled:opacity-60"
+          >
+            {busy ? '…' : mode === 'signIn' ? copy.enterEchoMap : copy.createAccount}
+          </button>
+        </div>
+        {message && (
+          <p className="m-0 mt-3 text-center text-[12px] leading-5 text-[#0053d4]" role="status">
+            {message}
+          </p>
+        )}
+      </section>
+    </main>
   );
 }
 
@@ -2838,7 +2957,7 @@ function SettingPage({
   const accountPhone = user?.phone?.trim()
     || metadataString(user?.user_metadata?.phone)
     || metadataString(user?.user_metadata?.phone_number);
-  const profileIdentifier = user?.id || accountEmail || accountPhone || 'echomap-user';
+  const profileIdentifier = user?.id || accountEmail || accountPhone || 'authenticated-user';
   const copy = MOBILE_COPY[language];
   const profileStorageKey = `echomap-mobile-profile-${profileIdentifier}`;
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -3407,10 +3526,11 @@ function SettingPage({
   );
 }
 
-export function MobileShell() {
+function AuthenticatedMobileShell() {
   const { loading, user } = useAuth();
   const userId = user?.id;
   const { language } = useLocalization();
+
   const [activeTab, setActiveTab] = useState<MobileTab>('home');
   const [mountedTabs, setMountedTabs] = useState<Set<MobileTab>>(() => new Set<MobileTab>(['home', 'gallery', 'setting']));
   const [mapShouldMount, setMapShouldMount] = useState(false);
@@ -3934,4 +4054,10 @@ export function MobileShell() {
       {activeTab !== 'setting' && <BottomNav activeTab={activeTab} onChange={setActiveTab} />}
     </div>
   );
+}
+
+export function MobileShell() {
+  const { loading, user } = useAuth();
+  if (loading || !user) return <LoginScreen />;
+  return <AuthenticatedMobileShell />;
 }
