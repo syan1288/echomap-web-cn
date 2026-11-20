@@ -30,6 +30,7 @@ type PaymentOrder = {
   credits: number;
   paymentUrl: string;
   instructions: string;
+  provider: 'manual' | 'wechat_native' | 'alipay_page';
 };
 
 const MODEL_OPTIONS = [
@@ -281,11 +282,29 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
         },
         body: JSON.stringify({ planId, contact: accountEmail || profilePhone || null }),
       });
-      const data = (await response.json().catch(() => ({}))) as { order?: PaymentOrder; error?: string };
+      const data = (await response.json().catch(() => ({}))) as {
+        order?: PaymentOrder;
+        paymentFormHtml?: string;
+        error?: string;
+      };
       if (!response.ok || !data.order) {
         throw new Error(data.error || `Unable to create order (${response.status})`);
       }
-      if (paymentWindow) {
+      if (data.paymentFormHtml) {
+        if (!paymentWindow) throw new Error('浏览器拦截了支付窗口，请允许弹出窗口后重试。');
+        try {
+          try {
+            paymentWindow.opener = null;
+          } catch {
+            // The browser may make opener immutable for a newly opened tab.
+          }
+          paymentWindow.document.open();
+          paymentWindow.document.write(data.paymentFormHtml);
+          paymentWindow.document.close();
+        } catch {
+          throw new Error('无法打开支付宝收银台，请重试。');
+        }
+      } else if (paymentWindow) {
         try {
           paymentWindow.opener = null;
         } catch {

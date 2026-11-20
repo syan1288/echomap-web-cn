@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAuthenticatedUser, type HeaderLike } from '../server/authUser.js';
-import { createPaymentOrder, listPaymentPlans } from '../server/paymentOrders.js';
+import { createPaymentCheckout, listPaymentPlans } from '../server/paymentOrders.js';
 import { applyCors, getJsonInput, handleOptions } from '../server/vercelHandlerUtils.js';
 
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
@@ -48,8 +48,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const contact = typeof body.contact === 'string' ? body.contact : null;
 
   try {
-    const order = await createPaymentOrder({ userId: auth.userId, planId, contact });
-    sendJson(res, 200, { order });
+    const checkout = await createPaymentCheckout({ userId: auth.userId, planId, contact });
+    sendJson(res, 200, checkout);
   } catch (error) {
     sendJson(res, 400, { error: error instanceof Error ? error.message : 'unable to create order' });
   }

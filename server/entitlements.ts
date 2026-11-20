@@ -107,6 +107,16 @@ type EntitlementStoreData = {
 export type EntitlementStoreAdapter = {
   readUser(userId: string): Promise<UserEntitlementRecord | undefined>;
   writeUser(userId: string, record: UserEntitlementRecord): Promise<void>;
+  consumeGeneration?(
+    userId: string,
+    env: EntitlementEnv,
+    now: Date
+  ): Promise<GenerationEntitlement>;
+  grantExtraCredits?(
+    userId: string,
+    credits: number,
+    now: Date
+  ): Promise<UserEntitlementRecord>;
 };
 
 function intFromEnv(value: string | undefined, fallback: number): number {
@@ -200,24 +210,20 @@ function recordFromSupabaseRow(row: SupabaseEntitlementRow): UserEntitlementReco
     monthlyPeriodKey: rowString(row, 'period_key', currentMonthKey()),
     monthlyGenerationUsed: rowNumber(row, 'generation_used', rowNumber(row, 'monthly_generation_used', 0)),
     extraCredits: rowNumber(row, 'extra_credits', 0),
+    generationUnlimited: row.generation_unlimited === true,
     landmarkCount: rowNumber(row, 'landmark_count', 0),
     photoCount: rowNumber(row, 'photo_count', 0),
     storageBytesUsed: rowNumber(row, 'storage_bytes_used', 0),
   };
 }
 
-function recordToSupabaseRow(userId: string, record: UserEntitlementRecord): SupabaseEntitlementRow {
+function usageRecordToSupabaseRow(userId: string, record: UserEntitlementRecord): SupabaseEntitlementRow {
   return {
     user_id: userId,
-    plan: record.plan,
-    period_key: record.monthlyPeriodKey,
-    generation_used: record.monthlyGenerationUsed,
-    starter_generation_used: record.lifetimeSuccessfulGenerations,
     landmark_count: record.landmarkCount,
     photo_count: record.photoCount,
     storage_bytes_used: record.storageBytesUsed,
-    extra_credits: record.extraCredits,
-    created_at: record.createdAt,
+    generation_unlimited: Boolean(record.generationUnlimited),
     updated_at: record.updatedAt,
   };
 }
@@ -226,14 +232,20 @@ export class SupabaseEntitlementStore implements EntitlementStoreAdapter {
   private readonly client: SupabaseClient;
   private readonly tableName: string;
 
-  constructor(env: EntitlementEnv = process.env) {
+  constructor(env: EntitlementEnv = process.env, client?: SupabaseClient) {
     const url = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
     const key = (env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
     if (!url || !key) {
       throw new Error('Supabase entitlement store requires SUPABASE_URL and a server-side Supabase key');
     }
-    this.client = createClient(url, key, { auth: { persistSession: false } });
+    this.client = client ?? createClient(url, key, { auth: { persistSession: false } });
     this.tableName = env.ECHO_ENTITLEMENTS_TABLE?.trim() || 'echo_entitlements';
+  }
+
+  private assertAtomicTable(): void {
+    if (this.tableName !== 'echo_entitlements') {
+      throw new Error('Atomic Supabase quota operations require ECHO_ENTITLEMENTS_TABLE=echo_entitlements');
+    }
   }
 
   async readUser(userId: string): Promise<UserEntitlementRecord | undefined> {
@@ -249,8 +261,47 @@ export class SupabaseEntitlementStore implements EntitlementStoreAdapter {
   async writeUser(userId: string, record: UserEntitlementRecord): Promise<void> {
     const { error } = await this.client
       .from(this.tableName)
-      .upsert(recordToSupabaseRow(userId, record), { onConflict: 'user_id' });
+      .upsert(usageRecordToSupabaseRow(userId, record), { onConflict: 'user_id' });
     if (error) throw error;
+  }
+
+  async consumeGeneration(
+    userId: string,
+    env: EntitlementEnv = process.env,
+    now = new Date()
+  ): Promise<GenerationEntitlement> {
+    this.assertAtomicTable();
+    const { data, error } = await this.client.rpc('consume_generation_entitlement', {
+      p_user_id: userId,
+      p_free_starter_limit: intFromEnv(env.ECHO_FREE_STARTER_GENERATIONS, 8),
+      p_free_monthly_limit: intFromEnv(env.ECHO_FREE_MONTHLY_GENERATIONS, 2),
+      p_plus_monthly_limit: intFromEnv(env.ECHO_PLUS_MONTHLY_GENERATIONS, 20),
+      p_pro_monthly_limit: intFromEnv(env.ECHO_PRO_MONTHLY_GENERATIONS, 60),
+      p_now: now.toISOString(),
+    });
+    if (error) throw error;
+    if (!data || typeof data !== 'object' || !('allowed' in data)) {
+      throw new Error('Supabase generation quota RPC returned an invalid result');
+    }
+    return data as GenerationEntitlement;
+  }
+
+  async grantExtraCredits(
+    userId: string,
+    credits: number,
+    now = new Date()
+  ): Promise<UserEntitlementRecord> {
+    this.assertAtomicTable();
+    const { data, error } = await this.client.rpc('grant_extra_credits', {
+      p_user_id: userId,
+      p_credits: credits,
+      p_granted_at: now.toISOString(),
+    });
+    if (error) throw error;
+    if (!data || typeof data !== 'object') {
+      throw new Error('Supabase credit grant RPC returned an invalid result');
+    }
+    return recordFromSupabaseRow(data as SupabaseEntitlementRow);
   }
 }
 
@@ -453,6 +504,10 @@ export async function consumeGenerationEntitlement(
   now = new Date(),
   store: EntitlementStoreAdapter = createEntitlementStore(env)
 ): Promise<GenerationEntitlement> {
+  if (store.consumeGeneration) {
+    return store.consumeGeneration(userId, env, now);
+  }
+
   const record = normalizeRecord(await store.readUser(userId), env, now);
   const before = evaluateRecord(record, env);
   if (!before.allowed) {
@@ -488,6 +543,10 @@ export async function grantExtraCredits(
   if (!userId.trim()) throw new Error('userId is required');
   if (!Number.isFinite(normalizedCredits) || normalizedCredits <= 0) {
     throw new Error('credits must be a positive integer');
+  }
+
+  if (store.grantExtraCredits) {
+    return store.grantExtraCredits(userId, normalizedCredits, now);
   }
 
   const record = normalizeRecord(await store.readUser(userId), env, now);

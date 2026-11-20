@@ -15,10 +15,18 @@ import { handleGenerationQuotaRequest } from './server/generationQuotaApiCore';
 import { handleUsageQuotaRequest } from './server/usageQuotaApiCore';
 import {
   confirmPaymentOrder,
-  createPaymentOrder,
+  createPaymentCheckout,
+  getAlipayPaymentStatus,
+  isPaymentReconcileAuthorized,
   isPaymentAdminAuthorized,
   listPaymentPlans,
+  reconcilePendingAlipayPayments,
+  type PaymentEnv,
 } from './server/paymentOrders';
+import {
+  handleAlipayNotification,
+  parseAlipayNotificationBody,
+} from './server/alipayNotify';
 import { handleWechatPayNotify } from './server/wechatPayNotify';
 import { handleSupabaseSendSmsHook } from './server/supabaseSmsHook';
 import { isGeminiProviderAvailable } from './shared/domain/image/providerAvailability';
@@ -68,9 +76,12 @@ export interface EchoApiEnv {
   ECHO_IMAGE_MODEL?: string;
   ECHO_PREFER_API_KEY?: string;
   SUPABASE_URL?: string;
+  SUPABASE_SECRET_KEY?: string;
   SUPABASE_ANON_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  SUPABASE_PUBLISHABLE_KEY?: string;
   VITE_SUPABASE_URL?: string;
+  VITE_SUPABASE_PUBLISHABLE_KEY?: string;
   VITE_SUPABASE_ANON_KEY?: string;
   ECHO_GENERATION_QUOTA_ENABLED?: string;
   ECHO_ENTITLEMENTS_STORE?: string;
@@ -93,6 +104,8 @@ export interface EchoApiEnv {
   ECHO_PRO_STORAGE_BYTES?: string;
   ECHO_PAYMENT_PROVIDER?: string;
   ECHO_PAYMENT_ADMIN_KEY?: string;
+  CRON_SECRET?: string;
+  ECHO_PAYMENT_ORDERS_STORE?: string;
   ECHO_PAYMENT_ORDERS_PATH?: string;
   ECHO_PLUS_PAYMENT_URL?: string;
   ECHO_PRO_PAYMENT_URL?: string;
@@ -1304,23 +1317,134 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
         }
 
         try {
-          const order = await createPaymentOrder(
+          const checkout = await createPaymentCheckout(
             {
               userId: auth.userId,
               planId: typeof body.planId === 'string' ? body.planId : '',
               contact: typeof body.contact === 'string' ? body.contact : null,
             },
-            env
+            env as PaymentEnv
           );
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
-          res.end(JSON.stringify({ order }));
+          res.end(JSON.stringify(checkout));
         } catch (error) {
           res.statusCode = 400;
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
           res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'unable to create order' }));
+        }
+        return;
+      }
+
+      if (pathname === '/api/payments/status') {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'method not allowed' }));
+          return;
+        }
+        const auth = await getAuthenticatedUser(req.headers as HeaderLike, env);
+        if (auth.ok === false) {
+          res.statusCode = auth.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({
+            error: auth.status === 401 ? 'Login required to check payment status.' : auth.error,
+            code: auth.status === 401 ? 'AUTH_REQUIRED' : 'AUTH_CONFIG_MISSING',
+          }));
+          return;
+        }
+        let body: Record<string, unknown> = {};
+        try {
+          body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+        } catch {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'invalid JSON body' }));
+          return;
+        }
+        try {
+          const result = await getAlipayPaymentStatus(
+            {
+              userId: auth.userId,
+              orderId: typeof body.orderId === 'string' ? body.orderId : '',
+            },
+            env as PaymentEnv
+          );
+          const entitlement = await getGenerationEntitlement(auth.userId, env);
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ ...result, entitlement }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'unable to check payment status';
+          res.statusCode = message === 'payment order not found' ? 404 : 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ error: message }));
+        }
+        return;
+      }
+
+      if (pathname === '/api/payments/reconcile') {
+        if (req.method !== 'GET' && req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'method not allowed' }));
+          return;
+        }
+        if (!isPaymentReconcileAuthorized(req.headers as HeaderLike, env as PaymentEnv)) {
+          const configured = Boolean(env.ECHO_PAYMENT_ADMIN_KEY?.trim() || env.CRON_SECRET?.trim());
+          res.statusCode = configured ? 401 : 503;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            error: configured
+              ? 'payment reconciliation authorization required'
+              : 'payment reconciliation key is not configured',
+            code: configured
+              ? 'PAYMENT_RECONCILE_UNAUTHORIZED'
+              : 'PAYMENT_RECONCILE_NOT_CONFIGURED',
+          }));
+          return;
+        }
+        try {
+          const result = await reconcilePendingAlipayPayments(env as PaymentEnv);
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify(result));
+        } catch (error) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            error: error instanceof Error ? error.message : 'unable to reconcile Alipay payments',
+          }));
+        }
+        return;
+      }
+
+      if (pathname === '/api/payments/alipay/notify') {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.end('failure');
+          return;
+        }
+        try {
+          const raw = await readBody(req);
+          await handleAlipayNotification(
+            parseAlipayNotificationBody(raw),
+            env as PaymentEnv
+          );
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.end('success');
+        } catch {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.end('failure');
         }
         return;
       }

@@ -6,6 +6,7 @@ import { LocalizationProvider } from './context/LocalizationContext';
 import { AuthProvider } from './context/AuthContext';
 import { shouldUseMobileShell } from './lib/appShellTarget';
 import { registerServiceWorker } from './lib/registerServiceWorker';
+import { AlipayPaymentReturn } from './components/AlipayPaymentReturn';
 
 registerServiceWorker();
 
@@ -33,13 +34,16 @@ const RootApp = React.lazy(() =>
     : import('./web/app/WebApp').then((module) => ({ default: module.WebApp }))
 );
 
+const RoutedApp: React.FC = () =>
+  window.location.pathname === '/payment/return'
+    ? <AlipayPaymentReturn />
+    : <Suspense fallback={null}><RootApp /></Suspense>;
+
 root.render(
   <React.StrictMode>
     <LocalizationProvider>
       <AuthProvider>
-        <Suspense fallback={null}>
-          <RootApp />
-        </Suspense>
+        <RoutedApp />
       </AuthProvider>
     </LocalizationProvider>
   </React.StrictMode>

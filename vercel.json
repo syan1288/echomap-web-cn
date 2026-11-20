@@ -24,6 +24,15 @@
     "api/generate.ts": {
       "maxDuration": 120,
       "memory": 1024
+    },
+    "api/payments/reconcile.ts": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/payments/reconcile",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

@@ -17,6 +17,7 @@ type PaymentOrder = {
   credits: number;
   paymentUrl: string;
   instructions: string;
+  provider: 'manual' | 'wechat_native' | 'alipay_page';
 };
 
 export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, title }) => {
@@ -32,10 +33,11 @@ export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, tit
     { id: 'pro' as const, name: t('helpPlanProName'), price: t('helpPlanProPrice'), detail: t('helpPlanProDetail') },
   ], [t]);
 
-  const createOrder = async (planId: PaidPlanId) => {
+  const createOrder = async (planId: PaidPlanId, paymentWindow: Window | null) => {
     setError(null);
     setOrder(null);
     if (!session?.access_token || !user) {
+      paymentWindow?.close();
       setError('请先登录后再购买额度。');
       return;
     }
@@ -50,12 +52,34 @@ export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, tit
         },
         body: JSON.stringify({ planId, contact: user.email || user.phone || null }),
       });
-      const data = (await response.json().catch(() => ({}))) as { order?: PaymentOrder; error?: string };
+      const data = (await response.json().catch(() => ({}))) as {
+        order?: PaymentOrder;
+        paymentFormHtml?: string;
+        error?: string;
+      };
       if (!response.ok || !data.order) {
         throw new Error(data.error || `Unable to create order (${response.status})`);
       }
+      if (data.paymentFormHtml) {
+        if (!paymentWindow) throw new Error('浏览器拦截了支付窗口，请允许弹出窗口后重试。');
+        try {
+          try {
+            paymentWindow.opener = null;
+          } catch {
+            // The browser may make opener immutable for a newly opened tab.
+          }
+          paymentWindow.document.open();
+          paymentWindow.document.write(data.paymentFormHtml);
+          paymentWindow.document.close();
+        } catch {
+          throw new Error('无法打开支付宝收银台，请重试。');
+        }
+      } else {
+        paymentWindow?.close();
+      }
       setOrder(data.order);
     } catch (err) {
+      paymentWindow?.close();
       const message = err instanceof Error ? err.message : '';
       setError(message.includes('payment plan is not available') ? '支付链接还没有配置，请稍后再试。' : message || '创建订单失败，请稍后再试。');
     } finally {
@@ -78,7 +102,10 @@ export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, tit
               key={plan.name}
               onClick={(event) => {
                 event.stopPropagation();
-                if (plan.id) void createOrder(plan.id);
+                if (plan.id) {
+                  const paymentWindow = window.open('about:blank', '_blank');
+                  void createOrder(plan.id, paymentWindow);
+                }
               }}
               disabled={!plan.id || pendingPlan === plan.id}
               className="block w-full rounded-[8px] border border-gray-200 px-4 py-3 text-left text-current transition-colors hover:border-[#1687ff] hover:bg-[#c6ddff]/65 focus-visible:border-[#1687ff] focus-visible:bg-[#c6ddff]/65 focus-visible:outline-none disabled:cursor-default disabled:opacity-70"
@@ -95,25 +122,33 @@ export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, tit
         {error && <div className="rounded-[6px] border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{error}</div>}
         {order && (
           <div className="rounded-[8px] border border-[#1687ff]/30 bg-[#eef6ff] p-4 text-[13px] leading-[1.55] text-[#3f4f5f]">
-            <div className="font-bold text-[#2d3c4a]">微信扫码支付</div>
+            <div className="font-bold text-[#2d3c4a]">
+              {order.provider === 'alipay_page' ? '支付宝网页支付' : '微信扫码支付'}
+            </div>
             <div className="mt-1">订单号：{order.id}</div>
             <div>套餐：{order.planName} · ¥{order.amountCny} · {order.credits} 次生成额度</div>
-            <img
-              src={order.paymentUrl}
-              alt={`${order.planName} 微信支付收款码`}
-              className="mt-3 block w-full rounded-[8px] border border-black/10 bg-white object-contain"
-            />
-            <p className="mt-2">支付后请保留订单号，人工确认后开通额度。</p>
-            <button
-              type="button"
-              className="mt-2 rounded-[6px] bg-[#1687ff] px-3 py-2 text-[13px] font-bold text-white"
-              onClick={(event) => {
-                event.stopPropagation();
-                window.open(order.paymentUrl, '_blank', 'noopener,noreferrer');
-              }}
-            >
-              打开支付链接
-            </button>
+            {order.provider === 'alipay_page' ? (
+              <p className="mt-2">已在新窗口打开支付宝收银台。付款完成后返回页面核实订单，额度以服务端确认结果为准。</p>
+            ) : (
+              <>
+                <img
+                  src={order.paymentUrl}
+                  alt={`${order.planName} 微信支付收款码`}
+                  className="mt-3 block w-full rounded-[8px] border border-black/10 bg-white object-contain"
+                />
+                <p className="mt-2">支付后请保留订单号，人工确认后开通额度。</p>
+                <button
+                  type="button"
+                  className="mt-2 rounded-[6px] bg-[#1687ff] px-3 py-2 text-[13px] font-bold text-white"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    window.open(order.paymentUrl, '_blank', 'noopener,noreferrer');
+                  }}
+                >
+                  打开支付链接
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

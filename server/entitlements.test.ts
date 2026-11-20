@@ -250,3 +250,215 @@ test('Supabase entitlement store accepts the current secret key env name', () =>
 
   assert.ok(createEntitlementStore(env) instanceof SupabaseEntitlementStore);
 });
+
+test('Supabase generation consumption uses one atomic database operation with configured limits', async () => {
+  const calls: Array<{ name: string; args: unknown }> = [];
+  const env = testEnv('', {
+    ECHO_FREE_STARTER_GENERATIONS: '3',
+    ECHO_FREE_MONTHLY_GENERATIONS: '4',
+    ECHO_PLUS_MONTHLY_GENERATIONS: '25',
+    ECHO_PRO_MONTHLY_GENERATIONS: '80',
+  });
+  const expected = {
+    allowed: true,
+    plan: 'free',
+    periodKey: 'extra',
+    limit: 20,
+    used: 1,
+    remaining: 19,
+  } as const;
+  const store = {
+    async readUser() {
+      throw new Error('atomic generation operation was bypassed');
+    },
+    async writeUser() {
+      throw new Error('atomic generation operation was bypassed');
+    },
+    async consumeGeneration(userId: string, options: EntitlementEnv, now: Date) {
+      calls.push({
+        name: userId,
+        args: {
+          ECHO_FREE_STARTER_GENERATIONS: options.ECHO_FREE_STARTER_GENERATIONS,
+          ECHO_FREE_MONTHLY_GENERATIONS: options.ECHO_FREE_MONTHLY_GENERATIONS,
+          ECHO_PLUS_MONTHLY_GENERATIONS: options.ECHO_PLUS_MONTHLY_GENERATIONS,
+          ECHO_PRO_MONTHLY_GENERATIONS: options.ECHO_PRO_MONTHLY_GENERATIONS,
+          now: now.toISOString(),
+        },
+      });
+      return expected;
+    },
+  } as EntitlementStoreAdapter & {
+    consumeGeneration(
+      userId: string,
+      env: EntitlementEnv,
+      now: Date
+    ): Promise<typeof expected>;
+  };
+
+  const result = await consumeGenerationEntitlement(
+    '00000000-0000-4000-8000-000000000001',
+    env,
+    new Date('2026-11-19T00:00:00.000Z'),
+    store
+  );
+
+  assert.deepEqual(result, expected);
+  assert.deepEqual(calls, [
+    {
+      name: '00000000-0000-4000-8000-000000000001',
+      args: {
+        ECHO_FREE_STARTER_GENERATIONS: '3',
+        ECHO_FREE_MONTHLY_GENERATIONS: '4',
+        ECHO_PLUS_MONTHLY_GENERATIONS: '25',
+        ECHO_PRO_MONTHLY_GENERATIONS: '80',
+        now: '2026-11-19T00:00:00.000Z',
+      },
+    },
+  ]);
+});
+
+test('Supabase entitlement store records consumption and grants through database RPCs', async () => {
+  const calls: Array<{ name: string; args: unknown }> = [];
+  const client = {
+    async rpc(name: string, args: unknown) {
+      calls.push({ name, args });
+      if (name === 'consume_generation_entitlement') {
+        return {
+          data: {
+            allowed: true,
+            plan: 'free',
+            periodKey: '2026-11',
+            limit: 2,
+            used: 1,
+            remaining: 1,
+          },
+          error: null,
+        };
+      }
+      return {
+        data: {
+          user_id: '00000000-0000-4000-8000-000000000001',
+          plan: 'free',
+          period_key: '2026-11',
+          generation_used: 0,
+          starter_generation_used: 0,
+          extra_credits: 7,
+          landmark_count: 0,
+          photo_count: 0,
+          storage_bytes_used: 0,
+          generation_unlimited: true,
+          created_at: '2026-11-19T00:00:00.000Z',
+          updated_at: '2026-11-19T00:00:00.000Z',
+        },
+        error: null,
+      };
+    },
+  };
+  const env = {
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_test_key',
+  } as EntitlementEnv;
+  const store = new SupabaseEntitlementStore(env, client as never);
+
+  const consumed = await store.consumeGeneration(
+    '00000000-0000-4000-8000-000000000001',
+    testEnv('', {
+      ECHO_FREE_STARTER_GENERATIONS: '3',
+      ECHO_FREE_MONTHLY_GENERATIONS: '4',
+      ECHO_PLUS_MONTHLY_GENERATIONS: '25',
+      ECHO_PRO_MONTHLY_GENERATIONS: '80',
+    }),
+    new Date('2026-11-19T00:00:00.000Z')
+  );
+  const granted = await grantExtraCredits(
+    '00000000-0000-4000-8000-000000000001',
+    7,
+    env,
+    new Date('2026-11-19T00:00:00.000Z'),
+    store
+  );
+
+  assert.equal(consumed.allowed, true);
+  assert.equal(granted.extraCredits, 7);
+  assert.equal(granted.generationUnlimited, true);
+  assert.deepEqual(calls, [
+    {
+      name: 'consume_generation_entitlement',
+      args: {
+        p_user_id: '00000000-0000-4000-8000-000000000001',
+        p_free_starter_limit: 3,
+        p_free_monthly_limit: 4,
+        p_plus_monthly_limit: 25,
+        p_pro_monthly_limit: 80,
+        p_now: '2026-11-19T00:00:00.000Z',
+      },
+    },
+    {
+      name: 'grant_extra_credits',
+      args: {
+        p_user_id: '00000000-0000-4000-8000-000000000001',
+        p_credits: 7,
+        p_granted_at: '2026-11-19T00:00:00.000Z',
+      },
+    },
+  ]);
+});
+
+test('atomic Supabase quota operations reject a custom entitlement table', async () => {
+  const store = new SupabaseEntitlementStore({
+    ECHO_ENTITLEMENTS_TABLE: 'custom_entitlements',
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_test_key',
+  } as EntitlementEnv, {
+    async rpc() {
+      throw new Error('unexpected RPC for unsupported table');
+    },
+  } as never);
+
+  await assert.rejects(
+    () => store.consumeGeneration('00000000-0000-4000-8000-000000000001', testEnv('')),
+    /require ECHO_ENTITLEMENTS_TABLE=echo_entitlements/
+  );
+});
+
+test('Supabase usage writes do not overwrite payment credits or generation counters', async () => {
+  let upserted: unknown;
+  const client = {
+    from() {
+      return {
+        upsert(value: unknown) {
+          upserted = value;
+          return Promise.resolve({ error: null });
+        },
+      };
+    },
+  };
+  const store = new SupabaseEntitlementStore({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_test_key',
+  } as EntitlementEnv, client as never);
+  const record: UserEntitlementRecord = {
+    plan: 'free',
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-19T00:00:00.000Z',
+    lifetimeSuccessfulGenerations: 5,
+    monthlyPeriodKey: '2026-11',
+    monthlyGenerationUsed: 9,
+    extraCredits: 40,
+    generationUnlimited: true,
+    landmarkCount: 2,
+    photoCount: 3,
+    storageBytesUsed: 50,
+  };
+
+  await store.writeUser('00000000-0000-4000-8000-000000000001', record);
+
+  assert.deepEqual(upserted, {
+    user_id: '00000000-0000-4000-8000-000000000001',
+    landmark_count: 2,
+    photo_count: 3,
+    storage_bytes_used: 50,
+    generation_unlimited: true,
+    updated_at: '2026-11-19T00:00:00.000Z',
+  });
+});
