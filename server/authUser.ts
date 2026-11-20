@@ -6,8 +6,10 @@ export type AuthUser =
 
 export type AuthEnv = {
   SUPABASE_URL?: string;
+  SUPABASE_PUBLISHABLE_KEY?: string;
   SUPABASE_ANON_KEY?: string;
   VITE_SUPABASE_URL?: string;
+  VITE_SUPABASE_PUBLISHABLE_KEY?: string;
   VITE_SUPABASE_ANON_KEY?: string;
 };
 
@@ -21,11 +23,17 @@ export function getBearerToken(headers: HeaderLike): string | null {
   return null;
 }
 
-function supabaseConfig(env: AuthEnv): { url: string; anonKey: string } | null {
+function supabaseConfig(env: AuthEnv): { url: string; apiKey: string } | null {
   const url = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
-  const anonKey = (env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || '').trim();
-  if (!url || !anonKey) return null;
-  return { url, anonKey };
+  const publishableKey = (
+    env.SUPABASE_PUBLISHABLE_KEY ||
+    env.SUPABASE_ANON_KEY ||
+    env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    env.VITE_SUPABASE_ANON_KEY ||
+    ''
+  ).trim();
+  if (!url || !publishableKey) return null;
+  return { url, apiKey: publishableKey };
 }
 
 export async function getAuthenticatedUser(
@@ -44,7 +52,7 @@ export async function getAuthenticatedUser(
   try {
     response = await fetch(`${config.url}/auth/v1/user`, {
       headers: {
-        apikey: config.anonKey,
+        apikey: config.apiKey,
         Authorization: `Bearer ${token}`,
       },
     });
