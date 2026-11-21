@@ -59,7 +59,7 @@ test('web sidebar auth overlay is translucent, centered, full-height, and keeps 
   const authPanel = read('../components/AuthPanel.tsx');
   const sidebar = read('../components/EchoSidebar.tsx');
 
-  assert.match(sidebar, /flex-\[0_0_35%\][^"]*-mb-\[2\.5vh\]/);
+  assert.match(sidebar, /flex-\[0_0_39%\][^"]*-mb-\[2\.5vh\]/);
   assert.match(sidebar, /bg-white\/60/);
   assert.match(sidebar, /backdrop-blur/);
   assert.match(sidebar, /footerHasSurface \? 'bg-white\/60 backdrop-blur-md' : 'bg-transparent'/);
@@ -84,7 +84,7 @@ test('all mobile auth feedback shares one reserved bottom area and a compact 12p
   const authPanel = read('../components/AuthPanel.tsx');
 
   assert.match(authPanel, /auth-feedback-footer/);
-  assert.match(authPanel, /min-h-\[3rem\] w-full shrink-0/);
+  assert.match(authPanel, /min-h-\[3\.25rem\] w-full shrink-0 items-end/);
   assert.match(authPanel, /whitespace-normal break-words px-2 text-center text-\[12px\] leading-tight/);
   assert.match(authPanel, /auth-feedback-footer[\s\S]*?hint && \([\s\S]*?className=\{AUTH_FEEDBACK_CLASS\}/);
   assert.doesNotMatch(authPanel, /hint && !hintAtChooserFooter/);

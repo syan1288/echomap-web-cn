@@ -644,7 +644,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
               <span className={`flex shrink-0 items-center justify-center rounded-full bg-white/75 ${embedded ? 'h-10 w-10 text-[1.25rem]' : 'h-14 w-14 text-[1.75rem]'}`}>
                 {recentInitial}
               </span>
-              <span className="flex min-w-0 flex-col gap-1">
+              <span className="flex min-w-0 flex-col gap-1 text-left">
                 <span className={`truncate ${embedded ? 'text-[0.9rem]' : 'text-[1.1rem]'}`}>{recentAccountName}</span>
                 <span className={`truncate ${embedded ? 'text-[0.8rem]' : 'text-[0.95rem]'}`}>{recentEmail}</span>
               </span>
@@ -988,7 +988,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
         )}
       </div>
       {isMobilePanel && (
-        <div className="auth-feedback-footer flex min-h-[3rem] w-full shrink-0 items-center justify-center px-1">
+        <div className="auth-feedback-footer flex min-h-[3.25rem] w-full shrink-0 items-end justify-center px-1 pb-1">
           {hint && (
             <p
               role="status"

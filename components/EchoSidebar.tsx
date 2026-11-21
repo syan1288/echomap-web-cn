@@ -999,7 +999,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
       )}
 
       {footerSlot && !collapsed && !user && (
-        <div className={`relative z-[5] mt-auto flex min-h-0 w-[calc(100%+2.5rem)] flex-[0_0_35%] -mx-5 -mb-[2.5vh] flex-col overflow-hidden rounded-t-[2rem] px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] ${
+        <div className={`relative z-[5] mt-auto flex min-h-0 w-[calc(100%+2.5rem)] flex-[0_0_39%] -mx-5 -mb-[2.5vh] flex-col overflow-hidden rounded-t-[2rem] px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] ${
           footerHasSurface ? 'bg-white/60 backdrop-blur-md' : 'bg-transparent'
         }`}>
           {footerSlot}
