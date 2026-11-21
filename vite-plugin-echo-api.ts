@@ -33,6 +33,7 @@ import { isGeminiProviderAvailable } from './shared/domain/image/providerAvailab
 import { describeProviderError } from './shared/domain/image/providerError';
 import { buildJimengPrompt } from './shared/domain/image/jimengPrompt';
 import { DEFAULT_BUILDING_STYLE_PROMPTS } from './shared/domain/building-style/buildingStyle';
+import { parseGoogleServiceAccountJson } from './shared/domain/googleServiceAccount';
 import { uploadJimengInputFromBase64 } from './server/jimengImageInput';
 import {
   consumeGenerationEntitlement,
@@ -68,6 +69,7 @@ export interface EchoApiEnv {
   GOOGLE_CLOUD_PROJECT?: string;
   GOOGLE_CLOUD_LOCATION?: string;
   GOOGLE_APPLICATION_CREDENTIALS?: string;
+  GOOGLE_SERVICE_ACCOUNT_JSON?: string;
   /**
    * Vertex 上用于出图的模型 ID（与控制台「任务」下拉无关，见 resolveImageModel 注释）。
    * 例：gemini-2.5-flash-image（默认 GA）、gemini-3.1-flash-image-preview（Nano Banana 2）
@@ -255,8 +257,10 @@ async function probeGeminiToken(env: EchoApiEnv): Promise<GeminiTokenProbe> {
   try {
     const probe = (async () => {
       const { GoogleAuth } = await import('google-auth-library');
+      const credentials = parseGoogleServiceAccountJson(env.GOOGLE_SERVICE_ACCOUNT_JSON);
       const auth = new GoogleAuth({
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        ...(credentials ? { credentials } : {}),
       });
       const client = await auth.getClient();
       const token = await client.getAccessToken();
@@ -931,11 +935,13 @@ function createGenAI(env: EchoApiEnv): GoogleGenAI | null {
   }
 
   if (project) {
+    const credentials = parseGoogleServiceAccountJson(env.GOOGLE_SERVICE_ACCOUNT_JSON);
     return new GoogleGenAI({
       vertexai: true,
       project,
       location,
       apiVersion: 'v1',
+      ...(credentials ? { googleAuthOptions: { credentials } } : {}),
     });
   }
   if (key) {
@@ -1094,7 +1100,9 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
           const credPath = resolvedCredentialsPath();
           const credentialsFileExists = credPath ? existsSync(credPath) : false;
           const hasProject = Boolean(env.GOOGLE_CLOUD_PROJECT?.trim());
-          const hasCredVar = Boolean(env.GOOGLE_APPLICATION_CREDENTIALS?.trim());
+          const hasCredVar = Boolean(
+            env.GOOGLE_APPLICATION_CREDENTIALS?.trim() || env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim()
+          );
           const hasGeminiKey = Boolean(env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim());
           const hasOpenAiKey = Boolean(env.OPENAI_API_KEY?.trim());
           const hasJimengKeys = Boolean(

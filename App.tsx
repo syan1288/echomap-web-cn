@@ -1955,8 +1955,8 @@ const App: React.FC = () => {
           className="text-[11px] leading-tight tracking-wide uppercase not-italic"
           style={{
             color: '#1A56DB',
-            fontFamily: FONT_GOOGLE_SANS,
-            fontWeight: 500,
+            fontFamily: '"Comfortaa", cursive',
+            fontWeight: 700,
           }}
         >
           {label}
@@ -1966,12 +1966,12 @@ const App: React.FC = () => {
 
     return (
       <div className="flex flex-wrap justify-center gap-6 w-full" style={{ rowGap: 12 }}>
-        {cell('CITY', cityN)}
-        {cell('COUNTRY', countryN)}
-        {cell('CONTINENT', continentN)}
+        {cell(t('galleryCity'), cityN)}
+        {cell(t('galleryCountry'), countryN)}
+        {cell(t('galleryContinent'), continentN)}
       </div>
     );
-  }, [lockedGalleryBuildings]);
+  }, [lockedGalleryBuildings, t]);
 
   const handleEchoNavigate = useCallback((tab: 'home' | 'gallery') => {
     const id = tab === 'home' ? 'echo-section-home' : 'echo-section-gallery';

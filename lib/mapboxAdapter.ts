@@ -181,6 +181,9 @@ export class MapboxAdapter {
   private defaultStyle: string;
   private currentStyle: string;
   private editorialStyleBound = false;
+  private fallbackStyle?: RasterStyle;
+  private fallbackStyleApplied = false;
+  private fallbackStyleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     mapboxgl: any,
@@ -229,6 +232,14 @@ export class MapboxAdapter {
         : {}),
     });
     this.enableInteractions();
+    if (this.fallbackStyle) {
+      this.map.on('error', this.handleInitialStyleError);
+      this.map.once('style.load', this.clearFallbackStyleTimer);
+      this.fallbackStyleTimer = setTimeout(
+        () => this.applyRasterFallback(),
+        options.fallbackStyleTimeoutMs ?? 5000
+      );
+    }
   }
 
   destroy() {
@@ -392,6 +403,26 @@ export class MapboxAdapter {
   private shouldApplyEditorialPaint() {
     return this.currentStyle === this.defaultStyle || /light-v11|standard/i.test(this.currentStyle);
   }
+
+  private handleInitialStyleError = (event?: any) => {
+    const message = String(event?.error?.message ?? event?.message ?? '');
+    if (/https?:\/\/api\.mapbox\.com\/styles\//i.test(message)) {
+      this.applyRasterFallback();
+    }
+  };
+
+  private applyRasterFallback() {
+    if (this.fallbackStyleApplied || !this.fallbackStyle) return;
+    this.fallbackStyleApplied = true;
+    this.clearFallbackStyleTimer();
+    this.map.setStyle(this.fallbackStyle);
+  }
+
+  private clearFallbackStyleTimer = () => {
+    if (this.fallbackStyleTimer === null) return;
+    clearTimeout(this.fallbackStyleTimer);
+    this.fallbackStyleTimer = null;
+  };
 
   on(event: string, handler: (evt?: any) => void) {
     const wrapped = this.wrapEvent(handler);

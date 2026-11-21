@@ -32,6 +32,18 @@ test('auth context uses real Supabase recovery, email verification, and Google O
   assert.match(authContext, /provider is not enabled/);
 });
 
+test('auth maps SMTP delivery failures to a verification-code message', () => {
+  const authContext = read('../context/AuthContext.tsx');
+  const authPanel = read('../components/AuthPanel.tsx');
+  const translations = read('../localization/translations.ts');
+
+  assert.match(authContext, /error sending magic link email/);
+  assert.match(authContext, /application-specific password/);
+  assert.match(authContext, /return 'Could not send verification code'/);
+  assert.match(authPanel, /authEmailSendFailed/);
+  assert.match(translations, /authEmailSendFailed: \{ en: 'Could not send verification code/);
+});
+
 test('forget password sends recovery email inline and shows a translated 60-second cooldown', () => {
   const authPanel = read('../components/AuthPanel.tsx');
   const translations = read('../localization/translations.ts');
@@ -45,14 +57,19 @@ test('forget password sends recovery email inline and shows a translated 60-seco
   assert.doesNotMatch(authPanel, /authCheckEmailToReset[\s\S]{0,200}authContinue/);
 });
 
-test('remembered accounts use passwordless OTP sign-in without creating another account', () => {
+test('remembered accounts open the Echo Map password sign-in form instead of sending an email', () => {
   const authPanel = read('../components/AuthPanel.tsx');
   const authContext = read('../context/AuthContext.tsx');
 
-  assert.match(authContext, /sendEmailSignInCode/);
-  assert.match(authContext, /shouldCreateUser:\s*false/);
-  assert.match(authPanel, /emailSignInCode/);
-  assert.match(authPanel, /handleRememberedSignIn/);
+  const rememberedHandler = authPanel.match(/const handleRememberedSignIn = \(\) => \{([\s\S]*?)\n  \};/);
+  assert.ok(rememberedHandler, 'remembered-account handler should exist');
+  assert.match(rememberedHandler[1], /setEmail\(recentEmail\)/);
+  assert.match(rememberedHandler[1], /setPassword\(''\)/);
+  assert.match(rememberedHandler[1], /go\('emailSignIn'\)/);
+  assert.doesNotMatch(rememberedHandler[1], /sendEmailSignInCode|emailSignInCode|verifyOtp/);
+  assert.match(authPanel, /signInWithEmail\(email, password\)/);
+  assert.doesNotMatch(authPanel, /case 'emailSignInCode'/);
+  assert.doesNotMatch(authContext, /sendEmailSignInCode/);
 });
 
 test('web sidebar auth overlay is translucent, centered, full-height, and keeps 20px navigation labels', () => {

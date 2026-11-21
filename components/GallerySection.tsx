@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import type { ProcessedImage } from '../web/app/webMemoryTypes';
+import { useLocalization } from '../context/LocalizationContext';
 import { filterBuildings, suggestLabels, type GalleryDim } from '../shared/domain/gallery/galleryFilter';
 import { galleryBuildingTitle } from '../shared/domain/gallery/buildingLabel';
 import { normalizeAvatarVariant } from '../utils/moonFacehash';
@@ -159,14 +160,15 @@ export interface GallerySectionProps {
   onSwipeToHome?: () => void;
 }
 
-const DIM_LABELS: { id: GalleryDim; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'city', label: 'City' },
-  { id: 'country', label: 'Country' },
-  { id: 'continent', label: 'Continent' },
+const DIM_LABEL_KEYS: { id: GalleryDim; key: string }[] = [
+  { id: 'all', key: 'galleryFilterAll' },
+  { id: 'city', key: 'galleryFilterCity' },
+  { id: 'country', key: 'galleryFilterCountry' },
+  { id: 'continent', key: 'galleryFilterContinent' },
 ];
 
 export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpenBuilding, onSwipeToHome }) => {
+  const { t } = useLocalization();
   const [query, setQuery] = useState('');
   const [dim, setDim] = useState<GalleryDim>('all');
   const [openDim, setOpenDim] = useState(false);
@@ -248,7 +250,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                         fontFamily: '"Roboto Mono", ui-monospace, monospace',
                       }}
                     >
-                      {DIM_LABELS.map((d) => (
+                      {DIM_LABEL_KEYS.map((d) => (
                         <li key={d.id}>
                           <button
                             type="button"
@@ -258,7 +260,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                               setOpenDim(false);
                             }}
                           >
-                            {d.label}
+                            {t(d.key)}
                           </button>
                         </li>
                       ))}
@@ -273,7 +275,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                     borderWidth: GALLERY_SEARCH_BORDER_PX,
                     fontFamily: '"Roboto Mono", ui-monospace, monospace',
                   }}
-                  placeholder="Filter…"
+                  placeholder={t('galleryFilter')}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onFocus={() => setActiveInput(true)}
@@ -401,7 +403,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                 className="col-span-full text-center text-sm py-12"
                 style={{ color: '#756F6C', fontFamily: '"Helvetica Neue", sans-serif' }}
               >
-                No matching buildings.
+                {t('galleryNoMatchingBuildings')}
               </div>
             )}
           </div>
@@ -419,7 +421,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
               <button
                 type="button"
                 className="border-0 bg-transparent p-1 text-[#332115] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                aria-label="Previous page"
+                aria-label={t('galleryPreviousPage')}
                 disabled={carouselPage <= 0}
                 onClick={() => setCarouselPage((p) => Math.max(0, p - 1))}
               >
@@ -439,8 +441,8 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
                         isPageDot
                           ? `Page ${i + 1}`
                           : carouselPage >= totalPages - 1
-                            ? 'First page'
-                            : 'Last page'
+                            ? t('galleryFirstPage')
+                            : t('galleryLastPage')
                       }
                       aria-current={isActivePage ? 'true' : undefined}
                       onClick={() => {
@@ -461,7 +463,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
               <button
                 type="button"
                 className="border-0 bg-transparent p-1 text-[#332115] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                aria-label="Next page"
+                aria-label={t('galleryNextPage')}
                 disabled={carouselPage >= totalPages - 1}
                 onClick={() => setCarouselPage((p) => Math.min(totalPages - 1, p + 1))}
               >

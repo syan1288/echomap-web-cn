@@ -48,3 +48,24 @@ test('Balance flow labels are localized in English and Chinese', () => {
     },
   );
 });
+
+test('gallery activity labels are localized in English and Chinese', () => {
+  assert.deepEqual(
+    {
+      city: [translations.galleryCity.en, translations.galleryCity.zh],
+      country: [translations.galleryCountry.en, translations.galleryCountry.zh],
+      continent: [translations.galleryContinent.en, translations.galleryContinent.zh],
+      trackActivities: [translations.galleryTrackActivities.en, translations.galleryTrackActivities.zh],
+      less: [translations.galleryLess.en, translations.galleryLess.zh],
+      more: [translations.galleryMore.en, translations.galleryMore.zh],
+    },
+    {
+      city: ['CITY', '城市'],
+      country: ['COUNTRY', '国家'],
+      continent: ['CONTINENT', '洲'],
+      trackActivities: ['Track your travel activities', '记录你的旅行活动'],
+      less: ['Less', '少'],
+      more: ['More', '多'],
+    },
+  );
+});

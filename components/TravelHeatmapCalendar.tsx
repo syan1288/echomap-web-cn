@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ProcessedImage } from '../web/app/webMemoryTypes';
+import { useLocalization } from '../context/LocalizationContext';
 import {
   aggregateUploadsByDay,
   buildYearHeatmapCells,
@@ -23,7 +24,20 @@ const LEVEL_FILL: Record<0 | 1 | 2 | 3 | 4 | 5, string> = {
   5: '#5F6D3B',
 };
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+const MONTH_KEYS = [
+  'galleryMonthJan',
+  'galleryMonthFeb',
+  'galleryMonthMar',
+  'galleryMonthApr',
+  'galleryMonthMay',
+  'galleryMonthJun',
+  'galleryMonthJul',
+  'galleryMonthAug',
+  'galleryMonthSep',
+  'galleryMonthOct',
+  'galleryMonthNov',
+  'galleryMonthDec',
+] as const;
 
 /** 月/周/图例文案 */
 const TRACK_FONT_PX = '10px';
@@ -55,6 +69,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
   buildings,
   year = new Date().getFullYear(),
 }) => {
+  const { t } = useLocalization();
   const rootRef = useRef<HTMLDivElement>(null);
   const [m, setM] = useState<LayoutMetrics | null>(null);
 
@@ -128,11 +143,11 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
   }, [numWeeks]);
 
   const monthLabelPositions = useMemo(() => {
-    return MONTHS.map((_, mi) => ({
-      label: MONTHS[mi],
+    return MONTH_KEYS.map((key, mi) => ({
+      label: t(key),
       col: weekColumnForMonthStart(year, mi, numWeeks),
     }));
-  }, [year, numWeeks]);
+  }, [numWeeks, t, year]);
 
   if (!m) {
     return (
@@ -164,7 +179,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
         containerType: 'size',
       }}
       role="region"
-      aria-label={`Travel heatmap calendar for ${year}`}
+      aria-label={`${t('galleryTrackActivities')} ${year}`}
     >
       <div
         style={{
@@ -192,7 +207,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
               letterSpacing: '0.04em',
             }}
           >
-            Track your travel activities
+            {t('galleryTrackActivities')}
           </h2>
           <div
             className="flex min-w-0 flex-1 flex-row flex-wrap items-center justify-end gap-0"
@@ -204,7 +219,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
             }}
             aria-label="Activity level legend"
           >
-            <span style={{ marginRight: m.legendLabelGap }}>Less</span>
+            <span style={{ marginRight: m.legendLabelGap }}>{t('galleryLess')}</span>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0 }}>
               {([1, 2, 3, 4, 5] as const).map((lv) => (
                 <span
@@ -221,7 +236,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
                 />
               ))}
             </div>
-            <span style={{ marginLeft: m.legendLabelGap }}>More</span>
+            <span style={{ marginLeft: m.legendLabelGap }}>{t('galleryMore')}</span>
           </div>
         </div>
 
@@ -267,9 +282,9 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
             }}
           >
             {[
-              { row: 1, text: 'Mon' },
-              { row: 3, text: 'Wed' },
-              { row: 5, text: 'Fri' },
+              { row: 1, text: t('galleryWeekMon') },
+              { row: 3, text: t('galleryWeekWed') },
+              { row: 5, text: t('galleryWeekFri') },
             ].map(({ row, text }) => (
               <span
                 key={text}

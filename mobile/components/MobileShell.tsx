@@ -150,7 +150,7 @@ const PLACE_LABELS: Record<string, { en: string; zh: string }> = {
 };
 
 const MOBILE_MODEL_OPTIONS: Array<{ id: MobileModelId; label: string }> = [
-  { id: 'jimeng', label: '即梦' },
+  { id: 'jimeng', label: 'Updream' },
   { id: 'gemini', label: 'Gemini' },
 ];
 const MOBILE_MODEL_STORAGE_KEY = 'echomap-mobile-image-model';

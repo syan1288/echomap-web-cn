@@ -21,7 +21,6 @@ export type AuthStage =
   | 'welcome'
   | 'signInChooser'
   | 'emailSignIn'
-  | 'emailSignInCode'
   | 'signUpChooser'
   | 'emailSignUp'
   | 'setPassword'
@@ -324,6 +323,10 @@ function translateAuthResult(result: AuthResult, t: (key: string) => string): st
       case 'Invalid login credentials':
       case 'Email or password is incorrect':
         return t('authInvalidCredentials');
+      case 'Could not send verification code':
+        return t('authEmailSendFailed');
+      case 'Email rate limit exceeded':
+        return t('authEmailRateLimitExceeded');
       case 'Google sign-in is not enabled':
         return t('authGoogleNotConfigured');
       default:
@@ -341,7 +344,6 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
     user,
     passwordRecovery,
     signInWithEmail,
-    sendEmailSignInCode,
     sendEmailSignupCode,
     verifyEmailSignupCode,
     setPasswordForCurrentUser,
@@ -462,41 +464,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
     if (!recentEmail) return;
     setEmail(recentEmail);
     setPassword('');
-    void run(
-      () => sendEmailSignInCode(recentEmail),
-      () => {
-        saveRecentEmail(recentEmail);
-        setCodeSentForEmail(recentEmail.trim());
-        setVerificationCode('');
-        setCodeSeconds(60);
-        setStage('emailSignInCode');
-        setHint(null);
-      },
-    );
-  };
-
-  const handleResendSignInCode = () => {
-    void run(
-      () => sendEmailSignInCode(email),
-      () => {
-        setCodeSentForEmail(email.trim());
-        setVerificationCode('');
-        setCodeSeconds(60);
-        setHint(null);
-      },
-    );
-  };
-
-  const handleVerifySignInCode = () => {
-    void run(
-      () => verifyEmailSignupCode(email, verificationCode),
-      () => {
-        saveRecentEmail(email);
-        setPassword('');
-        setStage('welcome');
-        setHint(null);
-      },
-    );
+    go('emailSignIn');
   };
 
   const handleVerifyCode = () => {
@@ -618,54 +586,6 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
     )
   );
 
-  const renderEmailSignInCode = () => (
-    <>
-      <h2 className={`m-0 ${mobileTitleClass}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT, fontWeight: 700 }}>
-        {t('authSignInTitle')}
-      </h2>
-      <p className={`m-0 w-full text-left ${embedded ? 'text-[13px]' : 'text-[16px]'}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}>
-        {email}
-      </p>
-      <p className={`m-0 w-full text-left ${embedded ? 'text-[12px]' : 'text-[14px]'}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}>
-        {t('authVerificationCodeSent')}
-      </p>
-      <AuthGlassInput
-        embedded={embedded}
-        type="text"
-        value={verificationCode}
-        onChange={setVerificationCode}
-        placeholder={t('authVerificationCode')}
-        onSubmit={handleVerifySignInCode}
-        trailingAction={(
-          <button
-            type="button"
-            onClick={handleResendSignInCode}
-            disabled={busy || codeSeconds > 0}
-            className={`shrink-0 whitespace-nowrap cursor-pointer border-0 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-50 ${embedded ? 'text-[12px]' : 'text-[16px]'}`}
-            style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}
-          >
-            {codeSeconds > 0 ? t('authResendCodeIn', { seconds: codeSeconds }) : t('authResend')}
-          </button>
-        )}
-      />
-      <div className={embedded ? 'mt-3 grid w-full grid-cols-2 gap-3 pt-0' : 'mt-auto grid w-full grid-cols-2 gap-5 pt-6'}>
-        <AuthActionButton embedded={embedded} onClick={() => go('signInChooser')} variant="secondary" mobile compact>
-          {t('authCancel')}
-        </AuthActionButton>
-        <AuthActionButton
-          embedded={embedded}
-          onClick={handleVerifySignInCode}
-          variant="mobileFilled"
-          mobile
-          compact
-          disabled={busy || !verificationCode.trim()}
-        >
-          {busy ? t('authProcessing') : t('authSubmitSignIn')}
-        </AuthActionButton>
-      </div>
-    </>
-  );
-
   const renderSignInChooser = () => (
     mobileLayout ? (
       <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -732,7 +652,11 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
       {recentEmail && (
         <button
           type="button"
-          onClick={() => setEmail(recentEmail)}
+          onClick={() => {
+            setEmail(recentEmail);
+            setPassword('');
+            go('emailSignIn');
+          }}
           className={`flex w-full cursor-pointer flex-col items-start gap-1 border border-white/80 bg-white/65 text-left backdrop-blur-md hover:bg-white/80 ${mobileLayout ? 'rounded-[14px] px-7 py-5' : 'rounded-2xl px-4 py-3'}`}
           style={{ color: '#111', fontFamily: AUTH_FONT }}
         >
@@ -932,8 +856,6 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
         return renderSignInChooser();
       case 'emailSignIn':
         return renderEmailSignIn();
-      case 'emailSignInCode':
-        return renderEmailSignInCode();
       case 'signUpChooser':
         return mobileLayout ? (
           <div className="flex min-h-0 w-full flex-1 flex-col">

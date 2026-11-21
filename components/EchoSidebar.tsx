@@ -49,7 +49,7 @@ type PaymentOrder = {
 };
 
 const MODEL_OPTIONS = [
-  { id: 'jimeng', label: '即梦' },
+  { id: 'jimeng', label: 'Updream' },
   { id: 'gemini', label: 'Gemini' },
 ] as const;
 
@@ -553,7 +553,6 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     const submenuLeft = Math.min(mainLeft + mainWidth + 8, window.innerWidth - submenuWidth - 12);
     const submenuTop = mainTop;
     const rowClass = 'flex min-h-[30px] w-full items-center gap-2 border border-transparent bg-transparent px-2 py-0.5 text-left text-[13px] text-[#111] hover:border-[#1687ff] hover:bg-[#c6ddff]/65 rounded-[5px] transition-colors';
-    const activeRowClass = 'border-[#1687ff] bg-[#c6ddff]/65';
     const submenuPanelClass = 'fixed rounded-none bg-white px-2 py-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.16)]';
     const iconSlotClass = 'flex h-3.5 w-3.5 shrink-0 items-center justify-center [&>svg]:h-3.5 [&>svg]:w-3.5';
 
@@ -561,6 +560,8 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
       if (id === 'gemini') return <GeminiBrandIcon />;
       return <JimengBrandIcon />;
     };
+    const styleName = (style: BuildingStyleDefinition) =>
+      style.builtin ? t(`buildingStyle_${style.id}`) : style.name;
     const currentPlanId = generationBalance?.currentPlan ?? 'free';
     const currentPlanName = t(
       currentPlanId === 'free'
@@ -651,18 +652,12 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                   type="button"
                   onClick={() => setBalancePage('overview')}
                   className="mb-1 border-0 bg-transparent p-0 text-[11px] text-[#666] hover:text-[#0053D4]"
+                  aria-label={t('authBack')}
                 >
-                  ‹ {t('balanceCurrentPlan')}
+                  ‹
                 </button>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[12px] font-semibold">{currentPlanName}</span>
-                  <span className="text-[10.5px] text-[#555]">
-                    {generationBalance
-                      ? t('balanceGenerationsRemaining', {
-                          count: generationBalance.remainingGenerations,
-                        })
-                      : '—'}
-                  </span>
                 </div>
                 <div className="text-[10.5px] leading-[1.4] text-[#666]">{currentPlanDetail}</div>
               </div>
@@ -674,8 +669,9 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                   type="button"
                   onClick={() => setBalancePage('overview')}
                   className="mx-2 mb-1 border-0 bg-transparent p-0 text-[11px] text-[#666] hover:text-[#0053D4]"
+                  aria-label={t('authBack')}
                 >
-                  ‹ {t('balanceUpgradePlan')}
+                  ‹
                 </button>
                 {paymentPlansLoading && (
                   <div className="px-2 py-1 text-[10.5px] text-[#666]">{t('balancePlansLoading')}</div>
@@ -765,12 +761,12 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                 type="button"
                 className="flex min-h-[30px] w-full items-center gap-2 rounded-[5px] border border-transparent bg-transparent px-2 py-1 text-left text-[13px] text-[#111] transition-colors hover:border-[#1687ff] hover:bg-[#c6ddff]/65"
                 onClick={() => {
-                  setEditingStyle(style);
                   setCreatingStyle(false);
                   closeAvatarMenu();
+                  setEditingStyle(style);
                 }}
               >
-                <span className="min-w-0 flex-1 truncate">{style.name}</span>
+                <span className="min-w-0 flex-1 truncate">{styleName(style)}</span>
                 <IconEdit />
               </button>
             ))}
@@ -780,7 +776,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
               onClick={() => {
                 setEditingStyle({
                   id: 'custom-draft',
-                  name: language === 'zh' ? '自定义风格' : 'Custom style',
+                  name: t('styleNewCustom'),
                   prompt: '',
                   builtin: false,
                 });
@@ -789,7 +785,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
               }}
             >
               <span className="text-[15px] leading-none">＋</span>
-              <span>{language === 'zh' ? '新建自定义风格' : 'New custom style'}</span>
+              <span>{t('styleNewCustom')}</span>
             </button>
           </div>
         )}
@@ -806,13 +802,13 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
           {([
             ['account', <IconAccount />, t('accountMenu')],
             ['balance', <IconPlan />, t('versionPlanMenu')],
-            ['style', <IconStyle />, language === 'zh' ? '风格' : 'Style'],
+            ['style', <IconStyle />, t('styleMenu')],
             ['model', <IconSparkles />, t('modelMenu')],
           ] as const).map(([id, icon, label]) => (
             <button
               key={id}
               type="button"
-              className={`${rowClass} ${activeSubmenu === id ? activeRowClass : ''}`}
+              className={rowClass}
               onPointerEnter={() => {
                 setActiveSubmenu(id);
                 if (id === 'balance') setBalancePage('overview');
