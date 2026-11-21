@@ -1232,7 +1232,7 @@ function BrandBlock({ compact = false, showSubtitle = true }: { compact?: boolea
   return (
     <div className="flex flex-col items-center text-center">
       <h1
-        className={`m-0 whitespace-nowrap leading-none text-[clamp(${compact ? '3.5rem' : '4.4rem'},15vw,6.2rem)]`}
+        className="mobile-brand-title m-0"
         style={{ color: BRAND_BLUE, fontFamily: DISPLAY_FONT, fontWeight: 400 }}
       >
         Echo Map
@@ -1297,12 +1297,12 @@ function LoginScreen() {
       <SidebarNoiseCanvas />
       <div className={`relative z-[1] flex min-h-[calc(100dvh-3.5rem)] w-full flex-1 flex-col items-center ${authStage === 'welcome' ? 'max-w-[520px]' : 'max-w-none'}`}>
         <div
-          className={`flex w-full items-center justify-center ${authStage === 'welcome' ? 'flex-1 -translate-y-16' : 'shrink-0 pb-8 pt-8'}`}
+          className={`flex w-full items-center justify-center ${authStage === 'welcome' ? 'flex-1 -translate-y-8' : 'shrink-0 pb-8 pt-8'}`}
           style={authStage === 'welcome' ? undefined : { minHeight: 'max(18rem, min(48dvh, calc(100dvh - 33rem)))' }}
         >
           <BrandBlock showSubtitle={authStage === 'welcome'} />
         </div>
-        <div className={`w-full shrink-0 ${authStage === 'welcome' ? 'max-w-[360px] -translate-y-16 pb-[10dvh]' : 'flex flex-1 flex-col'}`}>
+        <div className={`w-full shrink-0 ${authStage === 'welcome' ? 'max-w-[360px] -translate-y-8 pb-[8dvh]' : 'flex flex-1 flex-col'}`}>
           <AuthPanel mobileLayout onStageChange={setAuthStage} />
         </div>
       </div>
@@ -2986,6 +2986,14 @@ function SettingPage({
   );
   const sheetTitle = subview === 'account' ? copy.editProfile : subview === 'privacy' ? copy.privacyTitle : subview === 'styles' ? '生图风格' : copy.settings;
 
+  const handleMobileLogout = useCallback(async () => {
+    try {
+      await signOut();
+    } finally {
+      onClose();
+    }
+  }, [onClose, signOut]);
+
   useEffect(() => {
     setDraftAccountName(accountName);
   }, [accountName]);
@@ -3461,7 +3469,13 @@ function SettingPage({
                 <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
               </button>
 
-              <button type="button" onClick={() => void signOut()} className="echo-setting-row" aria-label={copy.logout}>
+              <button
+                type="button"
+                data-mobile-action="logout"
+                onClick={() => void handleMobileLogout()}
+                className="echo-setting-row"
+                aria-label={copy.logout}
+              >
                 <span className="echo-setting-icon echo-setting-icon-pure"><IconLogout size={22} /></span>
                 <span className="min-w-0 flex-1 text-left text-[14px] font-bold tracking-[0.02em] text-[#666]">{copy.logout}</span>
               </button>
