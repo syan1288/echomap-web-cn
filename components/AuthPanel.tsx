@@ -226,10 +226,10 @@ function ActionButton({
         ? compact
         ? embedded
           ? 'min-h-[2.5rem] rounded-[9px] px-3 text-[15px]'
-          : 'min-h-[clamp(3rem,6vh,4.75rem)] rounded-[12px] px-4 text-[20px]'
+          : 'auth-mobile-action min-h-[clamp(3rem,6vh,4.75rem)] rounded-[12px] px-4 text-[20px]'
         : embedded
           ? 'min-h-[3rem] rounded-[10px] px-3 text-[15px]'
-          : 'min-h-[clamp(3rem,6vh,4.75rem)] rounded-[14px] px-4 text-[20px]'
+          : 'auth-mobile-action min-h-[clamp(3rem,6vh,4.75rem)] rounded-[14px] px-4 text-[20px]'
       : 'min-h-11 rounded-full px-4 text-[13px]'
   }`;
   const styles = {
@@ -368,7 +368,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
   const recentEmail = useMemo(() => readRecentEmail(), []);
   const recentAccountName = useMemo(() => recentEmail.split('@')[0] || recentEmail, [recentEmail]);
   const recentInitial = recentAccountName.trim().charAt(0).toUpperCase() || 'S';
-  const mobileTitleClass = embedded ? 'text-left text-[1.4rem]' : 'text-left text-[2.2rem]';
+  const mobileTitleClass = embedded ? 'text-left text-[1.4rem]' : 'mobile-auth-title text-left text-[2.2rem]';
   useEffect(() => {
     onStageChange?.(stage);
   }, [onStageChange, stage]);
@@ -965,7 +965,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
         ...(isMobileSheet ? { minHeight: '44dvh' } : {}),
       }}
     >
-      <div className={`flex w-full flex-col ${isEmbeddedMobile ? 'gap-1 justify-center' : 'gap-3'} ${isMobilePanel ? 'min-h-0 flex-1' : ''} ${mobileLayout ? '' : 'w-full max-w-none'}`}>
+      <div className={`mobile-auth-content flex w-full flex-col ${isEmbeddedMobile ? 'gap-1 justify-center' : 'gap-3'} ${isMobilePanel ? 'min-h-0 flex-1' : ''} ${mobileLayout ? '' : 'w-full max-w-none'}`}>
         {renderContent()}
         {!mobileLayout && hint && (
           <p

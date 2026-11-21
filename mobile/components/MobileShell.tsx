@@ -1295,14 +1295,14 @@ function LoginScreen() {
   return (
     <main className={`mobile-shell mobile-home-screen relative flex min-h-[100dvh] flex-col items-center overflow-y-auto px-7 pt-[max(2rem,env(safe-area-inset-top))] text-[#0053d4] ${authStage === 'welcome' ? 'pb-[max(1.5rem,env(safe-area-inset-bottom))]' : 'pb-0'}`}>
       <SidebarNoiseCanvas />
-      <div className={`relative z-[1] flex min-h-[calc(100dvh-3.5rem)] w-full flex-1 flex-col items-center ${authStage === 'welcome' ? 'max-w-[520px]' : 'max-w-none'}`}>
+      <div className={`relative z-[1] flex min-h-[calc(100dvh-3.5rem)] w-full flex-1 flex-col items-center ${authStage === 'welcome' ? 'max-w-[520px]' : 'mobile-auth-stage max-w-none'}`}>
         <div
-          className={`flex w-full items-center justify-center ${authStage === 'welcome' ? 'flex-1 -translate-y-8' : 'shrink-0 pb-8 pt-8'}`}
-          style={authStage === 'welcome' ? undefined : { minHeight: 'max(18rem, min(48dvh, calc(100dvh - 33rem)))' }}
+          className={`flex w-full items-center justify-center ${authStage === 'welcome' ? 'flex-1 -translate-y-8' : 'mobile-auth-stage-brand shrink-0 pb-8 pt-8'}`}
+          style={authStage === 'welcome' ? undefined : { minHeight: 'max(14rem, min(38dvh, calc(100dvh - 23rem)))' }}
         >
           <BrandBlock showSubtitle={authStage === 'welcome'} />
         </div>
-        <div className={`w-full shrink-0 ${authStage === 'welcome' ? 'max-w-[360px] -translate-y-8 pb-[8dvh]' : 'flex flex-1 flex-col'}`}>
+        <div className={`w-full shrink-0 ${authStage === 'welcome' ? 'max-w-[360px] -translate-y-8 pb-[8dvh]' : 'mobile-auth-stage-form flex flex-1 flex-col'}`}>
           <AuthPanel mobileLayout onStageChange={setAuthStage} />
         </div>
       </div>

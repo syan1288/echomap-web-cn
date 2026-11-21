@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const mobileShell = readFileSync(new URL('../mobile/components/MobileShell.tsx', import.meta.url), 'utf8');
 const mobileCss = readFileSync(new URL('../mobile/components/MobileShell.css', import.meta.url), 'utf8');
+const authPanel = readFileSync(new URL('../components/AuthPanel.tsx', import.meta.url), 'utf8');
 
 test('mobile login uses an explicit responsive brand title instead of a generated Tailwind class', () => {
   assert.match(mobileShell, /mobile-brand-title/);
@@ -16,4 +17,11 @@ test('mobile settings keeps logout reachable and closes after sign out', () => {
   assert.match(mobileCss, /\.echo-settings-sheet\s*\{[\s\S]*scroll-padding-bottom:/);
   assert.match(mobileShell, /data-mobile-action="logout"/);
   assert.match(mobileShell, /const handleMobileLogout = useCallback/);
+});
+
+test('short mobile auth stages keep the registration sheet and actions inside the viewport', () => {
+  assert.match(mobileShell, /mobile-auth-stage/);
+  assert.match(authPanel, /auth-mobile-action/);
+  assert.match(mobileCss, /@media\s*\(max-width:\s*480px\)\s*and\s*\(max-height:\s*760px\)/);
+  assert.match(mobileCss, /\.mobile-shell \.auth-mobile-sheet \.auth-mobile-action/);
 });
