@@ -675,17 +675,15 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
               {t('authSubmitSignIn')}
             </AuthActionButton>
           </div>
-          <p className={`m-0 whitespace-nowrap text-center ${embedded ? 'pt-3 text-[14px]' : 'pt-3 text-[16px]'}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}>
+          <button
+            type="button"
+            onClick={() => go('signUpChooser')}
+            className={`m-0 flex w-full cursor-pointer touch-manipulation items-center justify-center whitespace-nowrap border-0 bg-transparent px-2 ${embedded ? 'pt-3 text-[14px]' : 'pt-3 text-[16px]'}`}
+            style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}
+          >
             {t('authDontHaveAccountLabel')}{' '}
-            <button
-              type="button"
-              onClick={() => go('signUpChooser')}
-              className="cursor-pointer border-0 bg-transparent p-0 underline decoration-1 underline-offset-2"
-              style={{ color: BRAND_BLUE, font: 'inherit' }}
-            >
-              {t('authSignUpAction')}
-            </button>
-          </p>
+            <span className="underline decoration-1 underline-offset-2">{t('authSignUpAction')}</span>
+          </button>
         </div>
       </div>
     ) : (
@@ -904,17 +902,15 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
               >
                 {t('authBack')}
               </AuthActionButton>
-              <p className={`m-0 whitespace-nowrap text-center ${embedded ? 'pt-3 text-[14px]' : 'pt-3 text-[16px]'}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}>
+              <button
+                type="button"
+                onClick={() => go('signInChooser')}
+                className={`m-0 flex w-full cursor-pointer touch-manipulation items-center justify-center whitespace-nowrap border-0 bg-transparent px-2 ${embedded ? 'pt-3 text-[14px]' : 'pt-3 text-[16px]'}`}
+                style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}
+              >
                 {t('authAlreadyHaveAccountLabel')}{' '}
-                <button
-                  type="button"
-                  onClick={() => go('signInChooser')}
-                  className="cursor-pointer border-0 bg-transparent p-0 underline decoration-1 underline-offset-2"
-                  style={{ color: BRAND_BLUE, font: 'inherit' }}
-                >
-                  {t('authSignInAction')}
-                </button>
-              </p>
+                <span className="underline decoration-1 underline-offset-2">{t('authSignInAction')}</span>
+              </button>
             </div>
           </div>
         ) : (
