@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { LogData } from '../shared/domain/memory/memoryTypes';
 import { MoonFaceAvatar } from './MoonFaceAvatar';
 import { MOON_FACE_MODE_COUNT, normalizeAvatarVariant } from '../utils/moonFacehash';
+import { useLocalization } from '../context/LocalizationContext';
 
 const FONT_TITLE = '"Roboto Mono", ui-monospace, monospace';
 const FONT_BODY = '"Roboto Mono", ui-monospace, monospace';
@@ -12,9 +13,8 @@ interface TravelLogModalProps {
   onClose: () => void;
 }
 
-const MOON_PLACEHOLDER = 'Type your moon……';
-
 export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onClose }) => {
+  const { t } = useLocalization();
   const [currentLog, setCurrentLog] = useState<LogData>(() => ({
     ...log,
     partner: log.partner ?? '',
@@ -74,12 +74,12 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
           style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}
           onClick={onClose}
         >
-          &lt; Back to map
+          &lt; {t('logBackToMap')}
         </button>
 
         <div className="flex flex-col gap-1">
           <label htmlFor="m02-date" className="text-sm" style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}>
-            Date
+            {t('logDate')}
           </label>
           <div className="relative">
             <input
@@ -102,7 +102,7 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
 
         <div className="flex flex-col gap-1">
           <label htmlFor="m02-partner" className="text-sm" style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}>
-            Partner
+            {t('logPartner')}
           </label>
           <input
             type="text"
@@ -115,19 +115,19 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor="m02-moon" className="text-sm" style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}>
-            Moon
+          <label htmlFor="m02-mood" className="text-sm" style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}>
+            {t('logMusings')}
           </label>
           <div className="flex items-stretch gap-2">
             <input
               type="text"
-              id="m02-moon"
+              id="m02-mood"
               name="moon"
               value={currentLog.moon}
               onChange={handleChange}
               maxLength={64}
               className="min-w-0 h-10 flex-1 box-border px-3 py-2 border border-black bg-white text-black text-sm rounded-none placeholder:text-neutral-400"
-              placeholder={MOON_PLACEHOLDER}
+              placeholder={t('logMoodPlaceholder')}
             />
             <div className="shrink-0 overflow-hidden border border-black bg-white">
               {moonOk ? (
@@ -147,7 +147,7 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
               type="button"
               onClick={handleNextVariant}
               className="flex h-10 w-10 shrink-0 items-center justify-center border border-black bg-white hover:bg-neutral-100 rounded-none"
-              aria-label="Switch moon avatar style"
+              aria-label={t('logSwitchMoodAvatar')}
               disabled={!moonOk}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -162,7 +162,7 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
 
         <div className="flex flex-col gap-1">
           <label htmlFor="m02-musings" className="text-sm" style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}>
-            Just writing
+            {t('logJustWriting')}
           </label>
           <textarea
             id="m02-musings"
@@ -181,7 +181,7 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
             className="px-4 py-2 border border-black bg-white text-black text-sm hover:bg-gray-100 rounded-none"
             style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="button"
@@ -189,7 +189,7 @@ export const TravelLogModal: React.FC<TravelLogModalProps> = ({ log, onSave, onC
             className="px-4 py-2 border border-black bg-white text-black text-sm hover:bg-gray-100 rounded-none"
             style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}
           >
-            Save
+            {t('save')}
           </button>
         </div>
       </div>
