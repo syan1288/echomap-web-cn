@@ -15,6 +15,11 @@
   font-size: max(14px, 1em);
 }
 
+.mobile-shell .auth-mobile-sheet button,
+.mobile-shell .auth-mobile-sheet input {
+  font-size: 20px;
+}
+
 .mobile-screen {
   animation: echoMobileIn 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }

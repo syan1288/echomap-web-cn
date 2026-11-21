@@ -25,7 +25,7 @@ import { buildGeocodeQueries, shouldGeocodeBuildingName } from './shared/domain/
 import { GalleryDetailModals } from './components/GalleryDetailModals';
 import { MemoryPhotoModal } from './components/MemoryPhotoModal';
 import { MemoryAudioModal } from './components/MemoryAudioModal';
-import { AuthPanel } from './components/AuthPanel';
+import { AuthPanel, type AuthStage } from './components/AuthPanel';
 import { resolveSessionAnchor, formatCityCountry } from './services/sessionGeo';
 import { normalizeLog } from './shared/domain/memory/normalizeLog';
 import { DEFAULT_BUILDING_STYLE, isBuildingStyleId, type BuildingStyleId } from './shared/domain/building-style/buildingStyle';
@@ -358,6 +358,7 @@ const makeAudioEntryFromFile = (
 const App: React.FC = () => {
   const { t, language, toggleLanguage } = useLocalization();
   const { user } = useAuth();
+  const [authStage, setAuthStage] = useState<AuthStage>('welcome');
   const [images, setImages] = useState<ProcessedImage[]>([]);
   const autoLoadedUidRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2078,9 +2079,10 @@ const App: React.FC = () => {
           statsFade={statsFade}
           homeStatusSlot={homeStatusSlot}
           galleryStatsSlot={galleryStatsSlot}
+          footerHasSurface={authStage !== 'welcome'}
           footerSlot={
             echoTab === 'home' ? (
-              <AuthPanel />
+              <AuthPanel mobileLayout embedded onStageChange={setAuthStage} />
             ) : null
           }
         />

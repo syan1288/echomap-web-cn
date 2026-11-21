@@ -30,7 +30,7 @@ import { VersionPlanModal } from '../../components/VersionPlanModal';
 import { AddBuildingModal } from '../../components/AddBuildingModal';
 import { BuildingStyleEditorModal } from '../../components/BuildingStyleEditorModal';
 import { MoonFaceAvatar } from '../../components/MoonFaceAvatar';
-import { AuthPanel } from '../../components/AuthPanel';
+import { AuthPanel, type AuthStage } from '../../components/AuthPanel';
 import { EchoSidebarBrandIllustration } from '../../components/EchoSidebarBrandIllustration';
 import { SidebarNoiseCanvas } from '../../components/SidebarNoiseCanvas';
 import { deploymentConfig } from '../../lib/deploymentConfig';
@@ -1221,7 +1221,7 @@ function GeneratingEllipsis({ className = '' }: { className?: string }) {
   );
 }
 
-function BrandBlock({ compact = false }: { compact?: boolean }) {
+function BrandBlock({ compact = false, showSubtitle = true }: { compact?: boolean; showSubtitle?: boolean }) {
   const copy = useMobileCopy();
   return (
     <div className="flex flex-col items-center text-center">
@@ -1246,12 +1246,14 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
           style={{ aspectRatio: '180 / 146' }}
         />
       )}
-      <p
-        className={`m-0 ${compact ? 'mt-5 max-w-[17rem] text-[16px] leading-[1.3]' : 'mt-8 max-w-[19rem] text-[20px] leading-[1.18]'} text-center font-normal`}
-        style={{ color: BRAND_BLUE, fontFamily: UI_FONT, fontWeight: 400 }}
-      >
-        {copy.brandSubtitle}
-      </p>
+      {showSubtitle && (
+        <p
+          className={`m-0 ${compact ? 'mt-5 max-w-[17rem] text-[16px] leading-[1.3]' : 'mt-8 max-w-[19rem] text-[20px] leading-[1.18]'} text-center font-normal`}
+          style={{ color: BRAND_BLUE, fontFamily: UI_FONT, fontWeight: 400 }}
+        >
+          {copy.brandSubtitle}
+        </p>
+      )}
     </div>
   );
 }
@@ -1260,6 +1262,7 @@ function LoginScreen() {
   const { configured, loading } = useAuth();
   const { language } = useLocalization();
   const copy = MOBILE_COPY[language];
+  const [authStage, setAuthStage] = useState<AuthStage>('welcome');
 
   if (loading) {
     return (
