@@ -12,7 +12,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   applyCors(req, res);
 
   if (req.method === 'GET') {
-    sendJson(res, 200, { plans: listPaymentPlans().filter((plan) => plan.enabled) });
+    sendJson(res, 200, {
+      plans: listPaymentPlans().map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        amountCny: plan.amountCny,
+        credits: plan.credits,
+        enabled: plan.enabled,
+      })),
+    });
     return;
   }
 

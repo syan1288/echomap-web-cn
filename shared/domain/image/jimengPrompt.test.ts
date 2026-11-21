@@ -12,6 +12,8 @@ test('keeps immutable building constraints while staying within Jimeng prompt li
   assert.ok(prompt.includes('去除背景、人物、车辆、天空、地面'));
   assert.ok(prompt.includes('Demo Building'));
   assert.ok(prompt.includes('architectural editorial illustration'));
+  assert.match(prompt, /透明 PNG/);
+  assert.doesNotMatch(prompt, /纯白背景/);
   assert.ok(prompt.length <= JIMENG_PROMPT_MAX_CHARS);
 });
 
@@ -23,4 +25,5 @@ test('truncates oversized user style text without dropping fixed constraints', (
   assert.ok(prompt.length <= JIMENG_PROMPT_MAX_CHARS);
   assert.ok(prompt.includes('保留建筑主体轮廓'));
   assert.ok(prompt.includes('去除背景、人物、车辆、天空、地面'));
+  assert.doesNotMatch(prompt, /纯白背景/);
 });

@@ -1,5 +1,6 @@
 import { getAuthenticatedUser, type AuthEnv, type HeaderLike } from './authUser.js';
 import {
+  getGenerationBalance,
   getGenerationEntitlement,
   type EntitlementEnv,
 } from './entitlements.js';
@@ -41,15 +42,19 @@ export async function handleGenerationQuotaRequest(
     };
   }
 
-  const entitlement = await getGenerationEntitlement(auth.userId, env);
+  const [entitlement, balance] = await Promise.all([
+    getGenerationEntitlement(auth.userId, env),
+    getGenerationBalance(auth.userId, env),
+  ]);
   return {
     status: entitlement.allowed ? 200 : 402,
     body: entitlement.allowed
-      ? entitlement
+      ? { ...entitlement, balance }
       : {
           error: 'Free generation quota used up. Upgrade or wait until next month.',
           code: 'GENERATION_QUOTA_EXHAUSTED',
           entitlement,
+          balance,
         },
   };
 }

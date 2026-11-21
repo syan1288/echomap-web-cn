@@ -15,7 +15,7 @@ const BRAND_BLUE = '#0053D4';
 const ICON_STROKE = 1.5;
 const RECENT_EMAIL_KEY = 'echomap-recent-auth-email';
 const AUTH_FONT = '"Comfortaa", cursive';
-const AUTH_FEEDBACK_CLASS = 'm-0 w-full text-center text-[16px] leading-snug';
+const AUTH_FEEDBACK_CLASS = 'm-0 w-full whitespace-normal break-words px-2 text-center text-[12px] leading-tight';
 
 export type AuthStage =
   | 'welcome'

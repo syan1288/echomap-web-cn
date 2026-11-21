@@ -21,8 +21,22 @@ const PANEL_STACK = `
 `;
 
 type ImageProvider = 'jimeng' | 'gemini';
-type AvatarSubmenu = 'account' | 'version' | 'model' | 'style' | null;
+type AvatarSubmenu = 'account' | 'balance' | 'model' | 'style' | null;
+type BalancePage = 'overview' | 'current' | 'upgrade';
 type PaidPlanId = 'plus' | 'pro';
+
+type GenerationBalance = {
+  currentPlan: 'free' | PaidPlanId;
+  quotaPlan: 'free' | PaidPlanId;
+  remainingGenerations: number;
+};
+
+type PaymentPlanSummary = {
+  id: PaidPlanId;
+  amountCny: number;
+  credits: number;
+  enabled: boolean;
+};
 
 type PaymentOrder = {
   id: string;
@@ -147,11 +161,10 @@ const JimengBrandIcon: React.FC = () => (
   </svg>
 );
 
-const IconSidebarToggle: React.FC<{ collapsed: boolean }> = ({ collapsed }) => (
+const IconSidebarToggle: React.FC = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <rect x="4" y="5" width="16" height="14" rx="1.5" />
     <path d="M10 5v14" />
-    {collapsed ? <path d="m13 12 3-2.5v5L13 12Z" fill="currentColor" stroke="none" /> : <path d="m11 12 3-2.5v5L11 12Z" fill="currentColor" stroke="none" />}
   </svg>
 );
 
@@ -209,6 +222,10 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
   const { t, language } = useLocalization();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [activeSubmenu, setActiveSubmenu] = React.useState<AvatarSubmenu>(null);
+  const [balancePage, setBalancePage] = React.useState<BalancePage>('overview');
+  const [generationBalance, setGenerationBalance] = React.useState<GenerationBalance | null>(null);
+  const [paymentPlans, setPaymentPlans] = React.useState<PaymentPlanSummary[]>([]);
+  const [paymentPlansLoading, setPaymentPlansLoading] = React.useState(false);
   const [pendingPaymentPlan, setPendingPaymentPlan] = React.useState<PaidPlanId | null>(null);
   const [paymentError, setPaymentError] = React.useState<string | null>(null);
   const [editingStyle, setEditingStyle] = React.useState<BuildingStyleDefinition | null>(null);
@@ -217,6 +234,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
   const [collapsed, setCollapsed] = React.useState(false);
   const avatarButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const avatarUploadRef = React.useRef<HTMLInputElement | null>(null);
+  const generationBalanceRef = React.useRef<GenerationBalance | null>(null);
   const navInactive = '#5C6670';
   const navActive = '#111111';
   const accountEmail = user?.email?.trim() ?? '';
@@ -238,6 +256,91 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     return window.localStorage.getItem(`${profileStorageKey}:avatar`);
   });
   const { styles, update, create, remove } = useBuildingStyles();
+
+  const refreshGenerationBalance = React.useCallback(async () => {
+    const accessToken = session?.access_token;
+    if (!user || !accessToken) {
+      generationBalanceRef.current = null;
+      setGenerationBalance(null);
+      return null;
+    }
+
+    try {
+      const response = await fetch(apiUrl('/api/generation-quota'), {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        balance?: GenerationBalance;
+        entitlement?: { plan?: GenerationBalance['quotaPlan'] };
+      };
+      if (!data.balance || !Number.isFinite(data.balance.remainingGenerations)) return null;
+      const nextBalance = {
+        ...data.balance,
+        currentPlan:
+          data.balance.currentPlan ??
+          data.entitlement?.plan ??
+          'free',
+      };
+      generationBalanceRef.current = nextBalance;
+      setGenerationBalance(nextBalance);
+      return nextBalance;
+    } catch {
+      return null;
+    }
+  }, [session?.access_token, user]);
+
+  React.useEffect(() => {
+    void refreshGenerationBalance();
+  }, [refreshGenerationBalance]);
+
+  React.useEffect(() => {
+    if (!user) return;
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') void refreshGenerationBalance();
+    };
+    window.addEventListener('focus', refreshIfVisible);
+    window.addEventListener('echomap:generation-completed', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      window.removeEventListener('focus', refreshIfVisible);
+      window.removeEventListener('echomap:generation-completed', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [refreshGenerationBalance, user]);
+
+  React.useEffect(() => {
+    if (activeSubmenu !== 'balance' || balancePage !== 'upgrade') return;
+    let cancelled = false;
+    setPaymentPlansLoading(true);
+    void fetch(apiUrl('/api/payments/create-order'), { method: 'GET', cache: 'no-store' })
+      .then(async (response) => {
+        const data = (await response.json().catch(() => ({}))) as { plans?: PaymentPlanSummary[] };
+        if (!cancelled) {
+          setPaymentPlans(
+            response.ok && Array.isArray(data.plans)
+              ? data.plans.filter(
+                  (plan) =>
+                    (plan.id === 'plus' || plan.id === 'pro') &&
+                    Number.isFinite(plan.amountCny) &&
+                    Number.isFinite(plan.credits) &&
+                    typeof plan.enabled === 'boolean',
+                )
+              : [],
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPaymentPlans([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPaymentPlansLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSubmenu, balancePage]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -318,6 +421,23 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
       } else {
         window.open(data.order.paymentUrl, '_blank', 'noopener,noreferrer');
       }
+
+      const startingBalance = generationBalanceRef.current?.remainingGenerations;
+      if (startingBalance != null) {
+        void (async () => {
+          for (let attempt = 0; attempt < 20; attempt += 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, 15_000));
+            const refreshed = await refreshGenerationBalance();
+            if (
+              refreshed &&
+              refreshed.currentPlan === planId &&
+              refreshed.remainingGenerations > startingBalance
+            ) {
+              break;
+            }
+          }
+        })();
+      }
     } catch (error) {
       paymentWindow?.close();
       const message = error instanceof Error ? error.message : '';
@@ -325,7 +445,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     } finally {
       setPendingPaymentPlan(null);
     }
-  }, [accountEmail, profilePhone, session?.access_token, user]);
+  }, [accountEmail, profilePhone, refreshGenerationBalance, session?.access_token, user]);
 
   const closeAvatarMenu = React.useCallback(() => {
     setMenuOpen(false);
@@ -367,10 +487,11 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     borderWidth: '1px',
   };
   const collapseButtonClass =
-    `hidden md:flex absolute top-4 z-[6] h-8 w-8 items-center justify-center border-0 bg-transparent text-[#818b99] transition-all duration-300 hover:text-[#0053D4] ${
+    `hidden md:flex absolute z-[6] h-8 w-8 items-center justify-center border-0 bg-transparent text-[#818b99] transition-all duration-300 hover:text-[#0053D4] ${
       collapsed ? 'left-1/2 -translate-x-1/2' : 'left-4'
     }`;
   const collapseButtonStyle: React.CSSProperties = {
+    top: 'calc(2.5vh + 1.4vh)',
     boxShadow: 'none',
   };
 
@@ -397,7 +518,9 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
         const rect = avatarButtonRef.current?.getBoundingClientRect() ?? null;
         setMenuAnchorRect(rect);
         setActiveSubmenu(null);
+        setBalancePage('overview');
         setMenuOpen(true);
+        void refreshGenerationBalance();
       }}
       className={className ?? 'flex h-10 min-h-10 w-10 min-w-10 items-center justify-center rounded-full border border-white/70 bg-white/78 text-[#0053D4] text-[16px] leading-none tracking-wide cursor-pointer backdrop-blur-md'}
       style={
@@ -423,7 +546,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
     }
 
     const mainWidth = 176;
-    const submenuWidth = activeSubmenu === 'version' ? 244 : activeSubmenu === 'style' ? 260 : 204;
+    const submenuWidth = activeSubmenu === 'balance' ? 244 : activeSubmenu === 'style' ? 260 : 204;
     const estimatedMainHeight = 174;
     const mainLeft = Math.min(Math.max(12, anchorRect.left), window.innerWidth - mainWidth - 12);
     const mainTop = Math.min(Math.max(12, anchorRect.top - estimatedMainHeight - 12), window.innerHeight - estimatedMainHeight - 12);
@@ -438,11 +561,18 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
       if (id === 'gemini') return <GeminiBrandIcon />;
       return <JimengBrandIcon />;
     };
-    const planRows = [
-      { id: null, name: t('helpPlanFreeName'), price: t('helpPlanFreePrice'), detail: language === 'zh' ? '8 次 + 每月 2 次' : '8 starter + 2/mo' },
-      { id: 'plus' as const, name: t('helpPlanPlusName'), price: t('helpPlanPlusPrice'), detail: language === 'zh' ? '每月 20 次' : '20 generations/mo' },
-      { id: 'pro' as const, name: t('helpPlanProName'), price: t('helpPlanProPrice'), detail: language === 'zh' ? '每月 60 次' : '60 generations/mo' },
-    ];
+    const currentPlanId = generationBalance?.currentPlan ?? 'free';
+    const currentPlanName = t(
+      currentPlanId === 'free'
+        ? 'helpPlanFreeName'
+        : currentPlanId === 'plus'
+          ? 'helpPlanPlusName'
+          : 'helpPlanProName',
+    );
+    const currentPlanDetail =
+      currentPlanId === 'free'
+        ? t('balancePlanFreeDetail')
+        : t('balancePlanPurchasedDetail');
 
     const submenuContent = activeSubmenu ? (
       <div
@@ -452,10 +582,10 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
           top: submenuTop,
           width: submenuWidth,
           zIndex: 230,
-          fontFamily: MONO_FONT,
+          fontFamily: AUTH_FONT,
           fontWeight: 400,
-          maxHeight: activeSubmenu === 'version' ? 'calc(100vh - 24px)' : undefined,
-          overflowY: activeSubmenu === 'version' ? 'auto' : undefined,
+          maxHeight: activeSubmenu === 'balance' ? 'calc(100vh - 24px)' : undefined,
+          overflowY: activeSubmenu === 'balance' ? 'auto' : undefined,
         }}
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -465,7 +595,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
               <button
                 type="button"
                 className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/25 bg-white text-[12px] text-[#0053D4]"
-                style={{ fontFamily: MONO_FONT }}
+                style={{ fontFamily: AUTH_FONT }}
                 onClick={() => avatarUploadRef.current?.click()}
                 aria-label="Upload avatar"
               >
@@ -491,31 +621,105 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
           </div>
         )}
 
-        {activeSubmenu === 'version' && (
+        {activeSubmenu === 'balance' && (
           <div className="space-y-1 text-left text-[11px] text-[#111]">
-            {planRows.map((plan) => (
-              <button
-                key={plan.name}
-                type="button"
-                disabled={!plan.id || pendingPaymentPlan === plan.id}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (plan.id) {
-                    const paymentWindow = window.open('about:blank', '_blank');
-                    void createPaymentOrder(plan.id, paymentWindow);
-                  }
-                }}
-                className="block w-full rounded-[5px] border border-transparent bg-transparent px-2 py-1 text-left transition-colors hover:border-[#1687ff] hover:bg-[#c6ddff]/65 disabled:cursor-default disabled:opacity-70"
-                data-map-ui="version-plan-row"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate text-[12px] font-semibold">{plan.name}</span>
-                  <span className="shrink-0 text-[10.5px] font-semibold text-[#555]">{plan.price}</span>
+            {balancePage === 'overview' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setBalancePage('current')}
+                  className="flex min-h-[34px] w-full items-center gap-2 rounded-[5px] border border-transparent bg-transparent px-2 text-left text-[12px] hover:border-[#1687ff] hover:bg-[#c6ddff]/65"
+                >
+                  <span className="min-w-0 flex-1">{t('balanceCurrentPlan')}</span>
+                  <span className="max-w-[88px] truncate font-semibold">{currentPlanName}</span>
+                  <IconChevronRight />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBalancePage('upgrade')}
+                  className="flex min-h-[34px] w-full items-center gap-2 rounded-[5px] border border-transparent bg-transparent px-2 text-left text-[12px] hover:border-[#1687ff] hover:bg-[#c6ddff]/65"
+                >
+                  <span className="min-w-0 flex-1">{t('balanceUpgradePlan')}</span>
+                  <IconChevronRight />
+                </button>
+              </>
+            )}
+
+            {balancePage === 'current' && (
+              <div className="space-y-1 px-2 py-1">
+                <button
+                  type="button"
+                  onClick={() => setBalancePage('overview')}
+                  className="mb-1 border-0 bg-transparent p-0 text-[11px] text-[#666] hover:text-[#0053D4]"
+                >
+                  ‹ {t('balanceCurrentPlan')}
+                </button>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-semibold">{currentPlanName}</span>
+                  <span className="text-[10.5px] text-[#555]">
+                    {generationBalance
+                      ? t('balanceGenerationsRemaining', {
+                          count: generationBalance.remainingGenerations,
+                        })
+                      : '—'}
+                  </span>
                 </div>
-                <div className="mt-0.5 text-[10.5px] leading-[1.35] text-[#666]">{plan.detail}</div>
-                {plan.id && pendingPaymentPlan === plan.id && <div className="mt-0.5 text-[10px] text-[#1687ff]">创建订单中...</div>}
-              </button>
-            ))}
+                <div className="text-[10.5px] leading-[1.4] text-[#666]">{currentPlanDetail}</div>
+              </div>
+            )}
+
+            {balancePage === 'upgrade' && (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setBalancePage('overview')}
+                  className="mx-2 mb-1 border-0 bg-transparent p-0 text-[11px] text-[#666] hover:text-[#0053D4]"
+                >
+                  ‹ {t('balanceUpgradePlan')}
+                </button>
+                {paymentPlansLoading && (
+                  <div className="px-2 py-1 text-[10.5px] text-[#666]">{t('balancePlansLoading')}</div>
+                )}
+                {!paymentPlansLoading && paymentPlans.length === 0 && (
+                  <div className="px-2 py-1 text-[10.5px] leading-[1.4] text-[#666]">
+                    {t('balancePlansUnavailable')}
+                  </div>
+                )}
+                {paymentPlans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    disabled={!plan.enabled || pendingPaymentPlan === plan.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const paymentWindow = window.open('about:blank', '_blank');
+                      void createPaymentOrder(plan.id, paymentWindow);
+                    }}
+                    className="block w-full rounded-[5px] border border-transparent bg-transparent px-2 py-1 text-left transition-colors hover:border-[#1687ff] hover:bg-[#c6ddff]/65 disabled:cursor-default disabled:opacity-60"
+                    data-map-ui="balance-upgrade-plan-row"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="min-w-0 truncate text-[12px] font-semibold">
+                        {t(plan.id === 'plus' ? 'helpPlanPlusName' : 'helpPlanProName')}
+                      </span>
+                      <span className="shrink-0 text-[10.5px] font-semibold text-[#555]">
+                        ¥{plan.amountCny}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[10.5px] leading-[1.35] text-[#666]">
+                      {t('balancePlanCredits', { count: plan.credits })} · {t('balanceOneTimePackage')}
+                    </div>
+                    {!plan.enabled && (
+                      <div className="mt-0.5 text-[10px] text-[#888]">{t('providerNotConfigured')}</div>
+                    )}
+                    {pendingPaymentPlan === plan.id && (
+                      <div className="mt-0.5 text-[10px] text-[#1687ff]">{t('authProcessing')}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {paymentError && <div className="rounded-[5px] border border-red-200 bg-red-50 px-2 py-1 text-[10px] leading-[1.35] text-red-700">{paymentError}</div>}
           </div>
         )}
@@ -533,7 +737,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                   className={`flex min-h-[28px] w-full items-center gap-2 rounded-[5px] border border-transparent bg-transparent px-2 py-0.5 text-left text-[13px] transition-colors ${
                     disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer hover:border-[#1687ff] hover:bg-[#c6ddff]/65'
                   } ${selected ? 'border-[#1687ff] bg-[#c6ddff]/65' : ''}`}
-                  style={{ color: disabled ? '#9A9A9A' : selected ? '#0053D4' : '#111', fontFamily: MONO_FONT, fontWeight: selected ? 600 : 400 }}
+                  style={{ color: disabled ? '#9A9A9A' : selected ? '#0053D4' : '#111', fontFamily: AUTH_FONT, fontWeight: selected ? 600 : 400 }}
                   onClick={() => {
                     if (disabled) return;
                     onImageProviderChange(item.id);
@@ -596,12 +800,12 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
       <div className="fixed inset-0 z-[220]" onMouseDown={closeAvatarMenu} data-map-ui="avatar-menu-layer">
         <div
           className="fixed rounded-none bg-white px-2 py-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.16)]"
-          style={{ left: mainLeft, top: mainTop, width: mainWidth, zIndex: 225, fontFamily: MONO_FONT, fontWeight: 400 }}
+          style={{ left: mainLeft, top: mainTop, width: mainWidth, zIndex: 225, fontFamily: AUTH_FONT, fontWeight: 400 }}
           onMouseDown={(event) => event.stopPropagation()}
         >
           {([
             ['account', <IconAccount />, t('accountMenu')],
-            ['version', <IconPlan />, t('versionPlanMenu')],
+            ['balance', <IconPlan />, t('versionPlanMenu')],
             ['style', <IconStyle />, language === 'zh' ? '风格' : 'Style'],
             ['model', <IconSparkles />, t('modelMenu')],
           ] as const).map(([id, icon, label]) => (
@@ -609,16 +813,31 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
               key={id}
               type="button"
               className={`${rowClass} ${activeSubmenu === id ? activeRowClass : ''}`}
-              onPointerEnter={() => setActiveSubmenu(id)}
-              onMouseEnter={() => setActiveSubmenu(id)}
+              onPointerEnter={() => {
+                setActiveSubmenu(id);
+                if (id === 'balance') setBalancePage('overview');
+              }}
+              onMouseEnter={() => {
+                setActiveSubmenu(id);
+                if (id === 'balance') setBalancePage('overview');
+              }}
               onMouseDown={(event) => {
                 event.stopPropagation();
                 setActiveSubmenu(id);
+                if (id === 'balance') setBalancePage('overview');
               }}
-              onClick={() => setActiveSubmenu(id)}
+              onClick={() => {
+                setActiveSubmenu(id);
+                if (id === 'balance') setBalancePage('overview');
+              }}
             >
               <span className={iconSlotClass}>{icon}</span>
               <span className="min-w-0 flex-1 truncate">{label}</span>
+              {id === 'balance' && (
+                <span className="shrink-0 text-[10px] text-[#666]">
+                  {generationBalance?.remainingGenerations ?? '—'}
+                </span>
+              )}
               <IconChevronRight />
             </button>
           ))}
@@ -663,7 +882,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
         style={collapseButtonStyle}
         aria-label={collapsed ? t('expandSidebar') : t('collapseSidebar')}
       >
-        <IconSidebarToggle collapsed={collapsed} />
+        <IconSidebarToggle />
       </button>
       {collapsed ? (
         <div className="relative z-[1] hidden h-full w-full md:flex md:flex-col md:items-center md:justify-between md:pt-16 md:pb-5">

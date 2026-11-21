@@ -1151,7 +1151,11 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
         return;
       }
 
-      if (req.method !== 'POST') {
+      const isGenerationQuotaRead =
+        pathname === '/api/generation-quota' && req.method === 'GET';
+      const isPaymentPlanRead =
+        pathname === '/api/payments/create-order' && req.method === 'GET';
+      if (req.method !== 'POST' && !isGenerationQuotaRead && !isPaymentPlanRead) {
         next();
         return;
       }
@@ -1271,7 +1275,17 @@ export function echoApiPlugin(env: EchoApiEnv): Plugin {
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
-          res.end(JSON.stringify({ plans: listPaymentPlans(env).filter((plan) => plan.enabled) }));
+          res.end(
+            JSON.stringify({
+              plans: listPaymentPlans(env).map((plan) => ({
+                id: plan.id,
+                name: plan.name,
+                amountCny: plan.amountCny,
+                credits: plan.credits,
+                enabled: plan.enabled,
+              })),
+            }),
+          );
           return;
         }
 

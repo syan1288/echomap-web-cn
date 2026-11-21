@@ -13,7 +13,7 @@ import {
   type PaymentOrder,
   type PaymentEnv,
 } from './paymentOrders.js';
-import { getGenerationEntitlement } from './entitlements.js';
+import { getGenerationBalance, getGenerationEntitlement } from './entitlements.js';
 
 function testEnv(dir: string, overrides: Partial<PaymentEnv> = {}): PaymentEnv {
   return {
@@ -100,6 +100,9 @@ test('concurrent confirmations for separate orders preserve both credit grants',
     assert.equal(entitlement.allowed, true);
     assert.equal(entitlement.periodKey, 'extra');
     assert.equal(entitlement.remaining, 40);
+    const balance = await getGenerationBalance('user_concurrent', env, now);
+    assert.equal(balance.currentPlan, 'plus');
+    assert.equal(balance.remainingGenerations, 40);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

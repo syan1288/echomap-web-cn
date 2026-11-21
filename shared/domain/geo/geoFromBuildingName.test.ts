@@ -14,3 +14,10 @@ test('skips empty and one-character names', () => {
   assert.equal(shouldGeocodeBuildingName(' '), false);
   assert.equal(shouldGeocodeBuildingName('粤'), false);
 });
+
+test('keeps building-name lookup bounded to the primary query and one fallback', () => {
+  const queries = buildGeocodeQueries('上海市黄浦区南京西路 123 号某地标建筑');
+
+  assert.equal(queries.length, 2);
+  assert.equal(queries[0], '上海市黄浦区南京西路 123 号某地标建筑');
+});

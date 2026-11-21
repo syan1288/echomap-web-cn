@@ -7,7 +7,7 @@ import {
 } from '../shared/domain/gallery/travelHeatmapData';
 
 const GALLERY_ARCH_BG = '#F9F1E2';
-const FONT_GOOGLE_SANS = '"Roboto", "Google Sans", system-ui, sans-serif';
+const COMFORTAA_FONT = '"Comfortaa", cursive';
 const TEXT_GRAY = '#756F6C';
 const CELL_OUTLINE = '#c4bfb5';
 /** 相对原 1px 描边的缩放（×0.8） */
@@ -186,7 +186,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
           <h2
             className="m-0 min-w-0 max-w-[min(100%,20rem)] shrink text-center text-base md:text-lg text-[#756F6C]"
             style={{
-              fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+              fontFamily: COMFORTAA_FONT,
               fontWeight: 400,
               lineHeight: 1.45,
               letterSpacing: '0.04em',
@@ -197,7 +197,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
           <div
             className="flex min-w-0 flex-1 flex-row flex-wrap items-center justify-end gap-0"
             style={{
-              fontFamily: FONT_GOOGLE_SANS,
+              fontFamily: COMFORTAA_FONT,
               fontWeight: 400,
               fontSize: TRACK_FONT_PX,
               color: TEXT_GRAY,
@@ -243,7 +243,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
                 position: 'absolute',
                 left: col * m.cell,
                 top: 0,
-                fontFamily: FONT_GOOGLE_SANS,
+                fontFamily: COMFORTAA_FONT,
                 fontWeight: 400,
                 fontSize: TRACK_FONT_PX,
                 color: TEXT_GRAY,
@@ -277,7 +277,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
                   position: 'absolute',
                   left: 0,
                   top: row * m.cell + m.cell / 2 - 5,
-                  fontFamily: FONT_GOOGLE_SANS,
+                  fontFamily: COMFORTAA_FONT,
                   fontWeight: 400,
                   fontSize: TRACK_FONT_PX,
                   color: TEXT_GRAY,

@@ -8,6 +8,7 @@ import {
   consumeUsageEntitlement,
   createEntitlementStore,
   grantExtraCredits,
+  getGenerationBalance,
   getGenerationEntitlement,
   getUsageEntitlement,
   releaseUsageEntitlement,
@@ -103,6 +104,49 @@ test('grantExtraCredits adds credits without resetting existing usage', async ()
     const secondGrant = await grantExtraCredits('user_grant', 5, env);
     assert.equal(secondGrant.extraCredits, 24);
     assert.equal(secondGrant.lifetimeSuccessfulGenerations, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('generation balance totals remaining starter, monthly, and purchased credits', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'echo-entitlements-'));
+  try {
+    const env = testEnv(dir, {
+      ECHO_FREE_STARTER_GENERATIONS: '8',
+      ECHO_FREE_MONTHLY_GENERATIONS: '2',
+    });
+    const store = createEntitlementStore(env);
+
+    await grantExtraCredits('user_balance', 20, env, new Date('2026-11-19T00:00:00.000Z'), store, 'plus');
+    const initial = await getGenerationBalance(
+      'user_balance',
+      env,
+      new Date('2026-11-19T00:00:00.000Z'),
+      store,
+    );
+
+    assert.deepEqual(initial, {
+      currentPlan: 'plus',
+      quotaPlan: 'free',
+      remainingGenerations: 30,
+    });
+
+    await consumeGenerationEntitlement(
+      'user_balance',
+      env,
+      new Date('2026-11-19T00:00:00.000Z'),
+      store,
+    );
+    const afterGeneration = await getGenerationBalance(
+      'user_balance',
+      env,
+      new Date('2026-11-19T00:00:00.000Z'),
+      store,
+    );
+    assert.equal(afterGeneration.remainingGenerations, 29);
+    assert.equal(afterGeneration.currentPlan, 'plus');
+    assert.equal(afterGeneration.quotaPlan, 'free');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -347,6 +391,7 @@ test('Supabase entitlement store records consumption and grants through database
           photo_count: 0,
           storage_bytes_used: 0,
           generation_unlimited: true,
+          last_purchased_plan: 'pro',
           created_at: '2026-11-19T00:00:00.000Z',
           updated_at: '2026-11-19T00:00:00.000Z',
         },
@@ -375,12 +420,14 @@ test('Supabase entitlement store records consumption and grants through database
     7,
     env,
     new Date('2026-11-19T00:00:00.000Z'),
-    store
+    store,
+    'pro'
   );
 
   assert.equal(consumed.allowed, true);
   assert.equal(granted.extraCredits, 7);
   assert.equal(granted.generationUnlimited, true);
+  assert.equal(granted.lastPurchasedPlan, 'pro');
   assert.deepEqual(calls, [
     {
       name: 'consume_generation_entitlement',
@@ -399,6 +446,7 @@ test('Supabase entitlement store records consumption and grants through database
         p_user_id: '00000000-0000-4000-8000-000000000001',
         p_credits: 7,
         p_granted_at: '2026-11-19T00:00:00.000Z',
+        p_plan_id: 'pro',
       },
     },
   ]);
@@ -439,6 +487,7 @@ test('Supabase usage writes do not overwrite payment credits or generation count
   } as EntitlementEnv, client as never);
   const record: UserEntitlementRecord = {
     plan: 'free',
+    lastPurchasedPlan: 'plus',
     createdAt: '2026-11-01T00:00:00.000Z',
     updatedAt: '2026-11-19T00:00:00.000Z',
     lifetimeSuccessfulGenerations: 5,

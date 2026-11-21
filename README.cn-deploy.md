@@ -165,9 +165,9 @@ JIMENG_ACCESS_KEY_ID=your_jimeng_access_key_id
 JIMENG_SECRET_ACCESS_KEY=your_jimeng_secret_access_key
 GEMINI_API_KEY=your_gemini_key
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
 # 仅当 quota 持久化切到 Supabase 表时填写，必须只放服务端
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+SUPABASE_SECRET_KEY=your_supabase_secret_key
 ECHO_GENERATION_QUOTA_ENABLED=true
 ECHO_FREE_STARTER_GENERATIONS=8
 ECHO_FREE_MONTHLY_GENERATIONS=2
@@ -175,6 +175,8 @@ ECHO_FREE_MONTHLY_GENERATIONS=2
 ECHO_ENTITLEMENTS_STORE=file
 ECHO_ENTITLEMENTS_STORE_PATH=/home/ubuntu/apps/echomap-web-cn/logs/entitlements.json
 ECHO_ENTITLEMENTS_TABLE=echo_entitlements
+# 订单使用 Supabase 时，必须同时将 ECHO_ENTITLEMENTS_STORE 设为 supabase
+ECHO_PAYMENT_ORDERS_STORE=file
 ECHO_PAYMENT_ORDERS_PATH=/home/ubuntu/apps/echomap-web-cn/logs/payment-orders.json
 ECHO_PAYMENT_PROVIDER=manual
 ECHO_PLUS_PAYMENT_URL=https://your-payment-page.example.com/plus
@@ -221,8 +223,13 @@ VITE_MAPBOX_STYLE=mapbox://styles/mapbox/standard
 - 若前端和 API 分离部署，记得把这些 AI 环境变量配在独立 API 服务上，而不是只配在静态前端机器上。
 - Free 版本额度拦截在 `/api/generate` 服务端生效。前端会随生成请求发送 Supabase access token；服务端验证后按 `ECHO_FREE_STARTER_GENERATIONS` 和 `ECHO_FREE_MONTHLY_GENERATIONS` 扣减额度。
 - 当前默认额度存储是单机文件型，适合腾讯云 Lighthouse 验证期。`logs/entitlements.json` 不需要提前手动创建；第一次登录用户成功生成并扣额度后，服务端会按 `ECHO_ENTITLEMENTS_STORE_PATH` 自动创建/写入这个文件。正式扩容、多实例或自动支付开通前，设置 `ECHO_ENTITLEMENTS_STORE=supabase` 并使用 Supabase 表持久化；推荐表结构见 `docs/quota-persistence.md`。
-- `ECHO_PAYMENT_PROVIDER=manual` 时，支付只创建待人工确认订单：`/api/payments/create-order` 写入 `ECHO_PAYMENT_ORDERS_PATH`，用户付款后用 `npm run grant:credits -- <userId> <credits>` 人工加额度。
+- `ECHO_PAYMENT_PROVIDER=manual` 时，支付只创建待人工确认订单：`/api/payments/create-order` 写入订单；付款核实后由管理员调用 `/api/payments/confirm-order` 确认。使用 Supabase store 时，确认会一并写入额度和授信流水。
 - `ECHO_PAYMENT_PROVIDER=wechat_native` 时，`/api/payments/create-order` 会向微信支付 Native 下单，微信支付成功后回调 `/api/payments/wechat/notify`；服务端验签、解密、核对金额后自动调用额度授信。配置步骤见 `docs/payment-automation-wechat.md`。
+- `ECHO_PAYMENT_PROVIDER=alipay_page` 时，`/api/payments/create-order` 返回由服务端生成的支付宝 POST 表单，成功通知发往 `/api/payments/alipay/notify`；用户回跳后，`/api/payments/status` 会按登录用户归属主动查单，只有验签、订单号和金额匹配后才自动发放额度。回跳参数本身不作为付款凭据。
+- `/api/payments/reconcile` 由 Vercel Cron 每天触发，扫描仍为待支付的支付宝订单并主动查单；它接受 Vercel 的 `CRON_SECRET`，也可用 `ECHO_PAYMENT_ADMIN_KEY` 手动触发。正常付款不依赖 Cron：支付宝异步通知会立即激活额度，用户回跳页也会自动查单重试。若需要更短的漏单兜底周期，可用外部定时器每 5 分钟调用该接口。
+- 支付宝沙箱使用本地 `.alipay-sandbox.json` 与 `ALIPAY_ENV=sandbox`；不要把沙箱应用配置文件提交到仓库或放入客户端。正式收款需先完成支付宝网页支付产品签约，并由支付宝商户平台提供正式应用 ID、应用私钥和支付宝公钥；缺少签约/正式凭据时只能验证代码与沙箱链路，不能真实收款。
+- 多实例或 Vercel 部署须将 `ECHO_PAYMENT_ORDERS_STORE` 与 `ECHO_ENTITLEMENTS_STORE` 同时设为 `supabase`。先执行 `supabase/002_entitlements.sql`、`supabase/003_payment_orders_and_credit_ledger.sql` 和 `supabase/005_balance_and_purchased_plan.sql`；选择支付宝网页收款时再执行 `supabase/004_alipay_webpay.sql`。订单确认、额度入账和流水写入由数据库函数在同一事务内完成；不要只切其中一个 store。
+- 支付宝退款/退款查询/关单 SDK 能力已封装，但没有开放退款入口：当前购买额度与用户余额可混合使用，尚未建立“退款时按订单回收未使用额度”的事务规则。制定并实现该规则前，不要直接对已开通额度的订单退款。
 
 ## 当前高德版行为
 

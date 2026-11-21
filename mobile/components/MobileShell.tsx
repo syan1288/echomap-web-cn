@@ -69,6 +69,11 @@ type PermissionKind = 'notifications' | 'camera' | 'photos' | 'microphone' | 'fi
 type MobileMapPlacement = { lat: number; lng: number; location?: string };
 type MapPlacementNotice = { id: number; location: string };
 type MapTextNotice = { id: number; text: string };
+type MobileGenerationBalance = {
+  currentPlan: 'free' | 'plus' | 'pro';
+  quotaPlan: 'free' | 'plus' | 'pro';
+  remainingGenerations: number;
+};
 
 type MobileMemory = {
   id: number;
@@ -121,6 +126,7 @@ const INK = '#111111';
 const MUTED = '#5f6656';
 const DISPLAY_FONT = '"Gasoek One", sans-serif';
 const MONO_FONT = '"Roboto Mono", ui-monospace, monospace';
+const COMFORTAA_FONT = '"Comfortaa", cursive';
 const UI_FONT = '"Plus Jakarta Sans", "Roboto", system-ui, sans-serif';
 const BRAND_ART = '/assets/echo-sidebar-brand.svg';
 const OPERA = '/assets/map-building-opera.png';
@@ -265,7 +271,7 @@ const MOBILE_COPY = {
     providerNotConfigured: 'Not configured',
     imageProviderNotConfigured: 'This image provider is not configured. Choose an available provider in Settings.',
     controls: 'Controls',
-    versionPlan: 'Version Plan',
+    versionPlan: 'Balance',
     permissionPrivacy: 'Permission & Privacy',
     permissionPrivacyLabel: 'Permission and privacy',
     logout: 'Logout',
@@ -356,7 +362,7 @@ const MOBILE_COPY = {
     providerNotConfigured: '未配置',
     imageProviderNotConfigured: '当前生图渠道尚未配置，请在设置中选择可用渠道。',
     controls: '操作',
-    versionPlan: '版本方案',
+    versionPlan: '余额',
     permissionPrivacy: '权限与隐私',
     permissionPrivacyLabel: '权限与隐私',
     logout: '退出登录',
@@ -2702,7 +2708,7 @@ function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
 
   return (
     <div className="echo-heatmap-mini mx-auto w-[90%] pb-1">
-      <div className="echo-heatmap-legend flex items-center justify-end gap-1 text-[12px] text-[#8f8068]" style={{ fontFamily: MONO_FONT }}>
+      <div className="echo-heatmap-legend flex items-center justify-end gap-1 text-[12px] text-[#8f8068]" style={{ fontFamily: COMFORTAA_FONT }}>
         <span>{copy.less}</span>
         <span className="flex items-center gap-0" aria-hidden>
           {levels.map((color, index) => (
@@ -2721,7 +2727,7 @@ function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
         </span>
         <span>{copy.more}</span>
       </div>
-      <div className="echo-heatmap-months relative px-1 text-[#8f8068]" style={{ fontFamily: MONO_FONT }}>
+      <div className="echo-heatmap-months relative px-1 text-[#8f8068]" style={{ fontFamily: COMFORTAA_FONT }}>
         {monthLabels.map((month) => (
           <span key={month.label} className="absolute top-0 -translate-x-1/2" style={{ left: month.left }}>
             {month.label}
@@ -2837,7 +2843,7 @@ function GalleryPage({ memories }: { memories: MobileMemory[] }) {
       </div>
       <div className="echo-gallery-heatmap-block">
         <div className="mobile-heatmap-divider" aria-hidden />
-        <p className="echo-heatmap-title text-center text-[15px]" style={{ color: '#6c655a', fontFamily: MONO_FONT }}>{copy.trackActivities}</p>
+        <p className="echo-heatmap-title text-center text-[15px]" style={{ color: '#6c655a', fontFamily: COMFORTAA_FONT }}>{copy.trackActivities}</p>
         <HeatmapMini memories={memories} />
       </div>
       <GalleryDetailModals
@@ -2882,7 +2888,7 @@ function SettingPage({
   onModelChange: (model: MobileModelId) => void;
   imageProviderAvailability: ImageProviderAvailability | null;
 }) {
-  const { user, signOut } = useAuth();
+  const { user, session, signOut } = useAuth();
   const { language, toggleLanguage } = useLocalization();
   const { styles, update, create, remove } = useBuildingStyles();
   const accountEmail = user?.email?.trim() ?? '';
@@ -2898,6 +2904,7 @@ function SettingPage({
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [controlsModalOpen, setControlsModalOpen] = useState(false);
   const [versionPlanModalOpen, setVersionPlanModalOpen] = useState(false);
+  const [generationBalance, setGenerationBalance] = useState<MobileGenerationBalance | null>(null);
   const [permissionHint, setPermissionHint] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
   const [subview, setSubview] = useState<SettingSubview>('main');
@@ -2923,6 +2930,43 @@ function SettingPage({
     if (typeof window === 'undefined') return null;
     return window.localStorage.getItem(`${profileStorageKey}:avatar`);
   });
+  const refreshGenerationBalance = useCallback(async () => {
+    if (!user || !session?.access_token) {
+      setGenerationBalance(null);
+      return null;
+    }
+    try {
+      const response = await fetch(apiUrl('/api/generation-quota'), {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store',
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        balance?: MobileGenerationBalance;
+      };
+      if (!data.balance) return null;
+      setGenerationBalance(data.balance);
+      return data.balance;
+    } catch {
+      return null;
+    }
+  }, [session?.access_token, user]);
+  useEffect(() => {
+    void refreshGenerationBalance();
+  }, [refreshGenerationBalance]);
+  useEffect(() => {
+    const refreshWhenActive = () => {
+      if (document.visibilityState === 'visible') void refreshGenerationBalance();
+    };
+    window.addEventListener('focus', refreshWhenActive);
+    window.addEventListener('echomap:generation-completed', refreshWhenActive);
+    document.addEventListener('visibilitychange', refreshWhenActive);
+    return () => {
+      window.removeEventListener('focus', refreshWhenActive);
+      window.removeEventListener('echomap:generation-completed', refreshWhenActive);
+      document.removeEventListener('visibilitychange', refreshWhenActive);
+    };
+  }, [refreshGenerationBalance]);
   const filteredMemories = useMemo(
     () => filterMobileMemories(memories.filter((memory) => !memory.deleted), filterQuery),
     [memories, filterQuery],
@@ -3399,9 +3443,15 @@ function SettingPage({
                 <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
               </button>
 
-              <button type="button" className="echo-setting-row" aria-label={copy.versionPlan} onClick={() => setVersionPlanModalOpen(true)}>
+              <button type="button" className="echo-setting-row" aria-label={copy.versionPlan} onClick={() => {
+                void refreshGenerationBalance();
+                setVersionPlanModalOpen(true);
+              }}>
                 <span className="echo-setting-icon echo-setting-icon-pure"><IconVersionPlan size={22} /></span>
                 <span className="min-w-0 flex-1 text-left text-[14px] font-bold tracking-[0.02em] text-[#666]">{copy.versionPlan}</span>
+                <span className="shrink-0 text-[13px] font-bold tracking-[0.01em] text-[#777]">
+                  {generationBalance?.remainingGenerations ?? '—'}
+                </span>
                 <span className="text-[#8a8a8a]"><IconChevronRight size={21} /></span>
               </button>
 

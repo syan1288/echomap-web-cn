@@ -85,7 +85,7 @@ const ensureAudioContext = async () => {
 
 
 // --- PROMPT DEFINITIONS ---
-const PROMPT_STYLE_GUIDANCE = "The style must be 3D isometric pixel art. The object must be isolated on a plain white background with no shadows. Do not include any explanatory text in the response; output only the final image.";
+const PROMPT_STYLE_GUIDANCE = "The style must be 3D isometric pixel art. Output one complete building as a true transparent PNG with alpha. Never draw a white, colored, gray, checkerboard, floor, shadow, glow, border, or other background. Do not include any explanatory text in the response; output only the final image.";
 const EDIT_PROMPT_TEMPLATE = (input: string) => `${input}. ${PROMPT_STYLE_GUIDANCE}`;
 
 
@@ -239,8 +239,9 @@ const processImageForTransparency = (imageUrl: string): Promise<ImageProcessingR
           pushIfMatch(canvas.width - 1, y);
         }
 
-        while (queue.length) {
-          const pos = queue.shift()!;
+        let queueHead = 0;
+        while (queueHead < queue.length) {
+          const pos = queue[queueHead++]!;
           const idx = pos * 4;
           data[idx + 3] = 0;
           const x = pos % canvas.width;
@@ -251,14 +252,6 @@ const processImageForTransparency = (imageUrl: string): Promise<ImageProcessingR
           pushIfMatch(x, y + 1);
         }
 
-        for (let i = 0; i < data.length; i += 4) {
-          if (data[i + 3] === 0) continue;
-          const r = data[i], g = data[i + 1], b = data[i + 2];
-          if (nearWhite(r, g, b)) {
-            data[i + 3] = 0;
-          }
-        }
-        
         for (let y = 0; y < canvas.height; y++) {
             for (let x = 0; x < canvas.width; x++) {
                 if (data[(y * canvas.width + x) * 4 + 3] > 0) {
@@ -941,22 +934,31 @@ const App: React.FC = () => {
       setMapExplored(true);
       const exifData = await getExifData(file);
       if (exifData) {
-        const langTag = language === 'zh' ? 'zh-CN' : 'en';
-        let locationName = await formatCityCountry(exifData.lat, exifData.lng, langTag);
-        if (!locationName) locationName = await reverseGeocode(exifData.lat, exifData.lng, language);
-        setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
         mapRef.current.setView([exifData.lat, exifData.lng], 16);
         requestAnimationFrame(() => {
           mapRef.current?.invalidateSize();
           window.setTimeout(() => mapRef.current?.invalidateSize(), 200);
         });
-        addImageAtLatLng(file, exifData, {
-          location: locationName,
+        const imageId = addImageAtLatLng(file, exifData, {
+          location: t('loadingLocation'),
           date: exifData.date,
           buildingNameHint: opts?.buildingName?.trim(),
           buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE,
           stylePrompt: opts?.stylePrompt,
         });
+        // Do not make generation wait for reverse geocoding. Enrich the label
+        // after the building placeholder and generation request are visible.
+        void (async () => {
+          const langTag = language === 'zh' ? 'zh-CN' : 'en';
+          let locationName = await formatCityCountry(exifData.lat, exifData.lng, langTag);
+          if (!locationName) locationName = await reverseGeocode(exifData.lat, exifData.lng, language);
+          setImages((prev) => prev.map((img) =>
+            img.id === imageId
+              ? { ...img, log: { ...img.log, location: locationName } }
+              : img
+          ));
+          setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
+        })();
         return;
       }
 
@@ -972,47 +974,62 @@ const App: React.FC = () => {
         return;
       }
 
-      const queries = buildGeocodeQueries(name);
-      for (const query of queries) {
-        try {
-          const geoRes = await fetch(apiUrl('/api/geocode'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, centerFromBbox: false }),
-          });
-          const geo = (await geoRes.json()) as {
-            found?: boolean;
-            lat?: number;
-            lng?: number;
-            display_name?: string;
-          };
-          if (geo.found && typeof geo.lat === 'number' && typeof geo.lng === 'number' && mapRef.current) {
-            const langTag = language === 'zh' ? 'zh-CN' : 'en';
-            let locationName = await formatCityCountry(geo.lat, geo.lng, langTag);
-            if (!locationName) locationName = geo.display_name || name;
-            setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
-            mapRef.current.setView([geo.lat, geo.lng], 16);
-            requestAnimationFrame(() => {
-              mapRef.current?.invalidateSize();
-              window.setTimeout(() => mapRef.current?.invalidateSize(), 200);
-            });
-            const date = new Date().toISOString().split('T')[0];
-            addImageAtLatLng(file, { lat: geo.lat, lng: geo.lng }, {
-              location: locationName,
-              date,
-              buildingNameHint: name,
-              buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE,
-              stylePrompt: opts?.stylePrompt,
-            });
-            return;
-          }
-        } catch (e) {
-          console.error('Geocode building name failed', e);
-        }
-      }
+      const center = mapRef.current.getCenter();
+      const initialLatLng = { lat: center.lat, lng: center.lng };
+      const date = new Date().toISOString().split('T')[0];
+      const imageId = addImageAtLatLng(file, initialLatLng, {
+        location: t('loadingLocation'),
+        date,
+        buildingNameHint: name,
+        buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE,
+        stylePrompt: opts?.stylePrompt,
+      });
 
-      setPlacementInfo({ file, buildingName: name, buildingStyle: isBuildingStyleId(opts?.buildingStyle) ? opts?.buildingStyle : DEFAULT_BUILDING_STYLE, stylePrompt: opts?.stylePrompt });
-      setToastMessage(t('toastGeocodeFailedManual'));
+      // Place and generate immediately. Geocoding can then move the marker
+      // when it succeeds, without blocking the expensive image request.
+      void (async () => {
+        const queries = buildGeocodeQueries(name);
+        for (const query of queries) {
+          const controller = new AbortController();
+          const timeoutId = window.setTimeout(() => controller.abort(), 2500);
+          try {
+            const geoRes = await fetch(apiUrl('/api/geocode'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query, centerFromBbox: false }),
+              signal: controller.signal,
+            });
+            const geo = (await geoRes.json()) as {
+              found?: boolean;
+              lat?: number;
+              lng?: number;
+              display_name?: string;
+            };
+            if (geo.found && typeof geo.lat === 'number' && typeof geo.lng === 'number') {
+              const locationName = geo.display_name || name;
+              setImages((prev) => prev.map((img) =>
+                img.id === imageId
+                  ? { ...img, lat: geo.lat!, lng: geo.lng!, log: { ...img.log, location: locationName } }
+                  : img
+              ));
+              mapRef.current?.setView([geo.lat, geo.lng], 16);
+              requestAnimationFrame(() => {
+                mapRef.current?.invalidateSize();
+                window.setTimeout(() => mapRef.current?.invalidateSize(), 200);
+              });
+              setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
+              return;
+            }
+          } catch (e) {
+            if (!(e instanceof DOMException && e.name === 'AbortError')) {
+              console.error('Geocode building name failed', e);
+            }
+          } finally {
+            window.clearTimeout(timeoutId);
+          }
+        }
+        setToastMessage(t('toastGeocodeFailedManual'));
+      })();
     },
     [addImageAtLatLng, language, mapState.isReady, t]
   );
@@ -1088,12 +1105,22 @@ const App: React.FC = () => {
         (async () => {
           const exifData = await getExifData(file);
           if (exifData) {
-              const langTag = language === 'zh' ? 'zh-CN' : 'en';
-              let locationName = await formatCityCountry(exifData.lat, exifData.lng, langTag);
-              if (!locationName) locationName = await reverseGeocode(exifData.lat, exifData.lng, language);
-              setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
               mapRef.current.setView([exifData.lat, exifData.lng], 16);
-              addImageAtLatLng(file, exifData, {location: locationName, date: exifData.date});
+              const imageId = addImageAtLatLng(file, exifData, {
+                location: t('loadingLocation'),
+                date: exifData.date,
+              });
+              void (async () => {
+                const langTag = language === 'zh' ? 'zh-CN' : 'en';
+                let locationName = await formatCityCountry(exifData.lat, exifData.lng, langTag);
+                if (!locationName) locationName = await reverseGeocode(exifData.lat, exifData.lng, language);
+                setImages((prev) => prev.map((img) =>
+                  img.id === imageId
+                    ? { ...img, log: { ...img.log, location: locationName } }
+                    : img
+                ));
+                setToastMessage(`${t('toastLocationFound')} ${locationName}.`);
+              })();
           } else {
               setToastMessage(t('toastNoLocationFound'));
               const point = { x: e.clientX, y: e.clientY };
@@ -2456,6 +2483,7 @@ const App: React.FC = () => {
             type="button"
             className="flex flex-col items-center bg-transparent border-0 cursor-pointer text-[#756F6C] transition-all duration-200 ease-in-out hover:-translate-y-0.5 text-base md:text-lg m-0 p-0"
             style={{
+              fontFamily: '"Comfortaa", cursive',
               fontWeight: 400,
               lineHeight: 1.45,
               letterSpacing: '0.04em',

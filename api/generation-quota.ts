@@ -11,6 +11,7 @@ function applyCors(res: VercelResponse): void {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Cache-Control', 'private, no-store');
   applyCors(res);
   if (req.method === 'OPTIONS') {
     res.status(204).end();

@@ -1,7 +1,7 @@
 export const JIMENG_PROMPT_MAX_CHARS = 800;
 
 const IMMUTABLE_BUILDING_RULES =
-  '保留建筑主体轮廓、屋顶、体块与地标识别度；去除背景、人物、车辆、天空、地面等。仅输出一个独立建筑立绘，透明或纯白背景，PNG。';
+  '保留建筑主体轮廓、屋顶、体块与地标识度；去除背景、人物、车辆、天空、地面等。仅输出一个独立建筑立绘，透明 PNG。禁止白色或彩色背景、阴影、光晕、外框和棋盘格模拟透明。';
 
 function takeWithinLimit(value: string, remaining: number): string {
   if (remaining <= 0) return '';

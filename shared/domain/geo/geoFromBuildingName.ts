@@ -30,6 +30,8 @@ export function buildGeocodeQueries(name: string): string[] {
   );
   if (landmarkCity?.[1]) push(landmarkCity[1]);
 
-  return out.slice(0, 8);
+  // Keep the foreground lookup responsive: the full name plus one useful
+  // fallback are enough for the API to try its configured providers.
+  return out.slice(0, 2);
 }
 

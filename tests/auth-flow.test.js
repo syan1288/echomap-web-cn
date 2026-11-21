@@ -80,12 +80,12 @@ test('embedded saved-account chooser keeps alternate-account action with the sha
   assert.match(authPanel, /auth-feedback-footer/);
 });
 
-test('all mobile auth feedback shares one reserved bottom area and a consistent 16px font', () => {
+test('all mobile auth feedback shares one reserved bottom area and a compact 12px font', () => {
   const authPanel = read('../components/AuthPanel.tsx');
 
   assert.match(authPanel, /auth-feedback-footer/);
   assert.match(authPanel, /min-h-\[3rem\] w-full shrink-0/);
-  assert.match(authPanel, /text-\[16px\] leading-snug/);
+  assert.match(authPanel, /whitespace-normal break-words px-2 text-center text-\[12px\] leading-tight/);
   assert.match(authPanel, /auth-feedback-footer[\s\S]*?hint && \([\s\S]*?className=\{AUTH_FEEDBACK_CLASS\}/);
   assert.doesNotMatch(authPanel, /hint && !hintAtChooserFooter/);
 });

@@ -183,6 +183,10 @@ export const generateImageWithPrompt = async (
     throw new Error(data.error || 'No imageUrl in response');
   }
 
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('echomap:generation-completed'));
+  }
+
   return { imageUrl: data.imageUrl, text: null };
 };
 

@@ -431,7 +431,7 @@ class FilePaymentOrderStore implements PaymentOrderStoreAdapter {
       }
       if (existing.status === 'confirmed') return existing;
 
-      await grantExtraCredits(existing.userId, existing.credits, this.env, now);
+      await grantExtraCredits(existing.userId, existing.credits, this.env, now, undefined, existing.planId);
       const confirmed: PaymentOrder = {
         ...existing,
         status: 'confirmed',
@@ -481,7 +481,14 @@ class FilePaymentOrderStore implements PaymentOrderStoreAdapter {
         if (existing.status !== 'pending_alipay_payment') {
           throw new Error('Alipay payment order cannot be confirmed from current status');
         }
-        await grantExtraCredits(existing.userId, existing.credits, this.env, input.receivedAt);
+        await grantExtraCredits(
+          existing.userId,
+          existing.credits,
+          this.env,
+          input.receivedAt,
+          undefined,
+          existing.planId,
+        );
         store.orders[orderId] = {
           ...existing,
           status: 'confirmed',

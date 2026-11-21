@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { MAX_UPLOAD_BYTES } from '../shared/domain/uploads/uploadLimits.js';
 
 export type GenerationPlan = 'free' | 'plus' | 'pro';
+export type PaidGenerationPlan = Exclude<GenerationPlan, 'free'>;
 export type UsageQuotaKind = 'landmark_count' | 'photo_count' | 'storage_bytes_used';
 
 export type EntitlementEnv = {
@@ -88,6 +89,7 @@ export type UsageEntitlement =
 
 export type UserEntitlementRecord = {
   plan: GenerationPlan;
+  lastPurchasedPlan: PaidGenerationPlan | null;
   createdAt: string;
   updatedAt: string;
   lifetimeSuccessfulGenerations: number;
@@ -115,8 +117,15 @@ export type EntitlementStoreAdapter = {
   grantExtraCredits?(
     userId: string,
     credits: number,
-    now: Date
+    now: Date,
+    purchasePlan?: PaidGenerationPlan
   ): Promise<UserEntitlementRecord>;
+};
+
+export type GenerationBalance = {
+  currentPlan: GenerationPlan;
+  quotaPlan: GenerationPlan;
+  remainingGenerations: number;
 };
 
 function intFromEnv(value: string | undefined, fallback: number): number {
@@ -202,8 +211,10 @@ function recordFromSupabaseRow(row: SupabaseEntitlementRow): UserEntitlementReco
   const now = new Date().toISOString();
   const rawPlan = rowString(row, 'plan');
   const plan: GenerationPlan = rawPlan === 'plus' || rawPlan === 'pro' ? rawPlan : 'free';
+  const rawPurchasedPlan = rowString(row, 'last_purchased_plan');
   return {
     plan,
+    lastPurchasedPlan: rawPurchasedPlan === 'plus' || rawPurchasedPlan === 'pro' ? rawPurchasedPlan : null,
     createdAt: rowString(row, 'created_at', now),
     updatedAt: rowString(row, 'updated_at', now),
     lifetimeSuccessfulGenerations: rowNumber(row, 'starter_generation_used', rowNumber(row, 'lifetime_generation_used', 0)),
@@ -289,13 +300,15 @@ export class SupabaseEntitlementStore implements EntitlementStoreAdapter {
   async grantExtraCredits(
     userId: string,
     credits: number,
-    now = new Date()
+    now = new Date(),
+    purchasePlan?: PaidGenerationPlan
   ): Promise<UserEntitlementRecord> {
     this.assertAtomicTable();
     const { data, error } = await this.client.rpc('grant_extra_credits', {
       p_user_id: userId,
       p_credits: credits,
       p_granted_at: now.toISOString(),
+      ...(purchasePlan ? { p_plan_id: purchasePlan } : {}),
     });
     if (error) throw error;
     if (!data || typeof data !== 'object') {
@@ -320,6 +333,10 @@ function normalizeRecord(
   const createdAt = now.toISOString();
   const next: UserEntitlementRecord = {
     plan: record?.plan === 'plus' || record?.plan === 'pro' ? record.plan : 'free',
+    lastPurchasedPlan:
+      record?.lastPurchasedPlan === 'plus' || record?.lastPurchasedPlan === 'pro'
+        ? record.lastPurchasedPlan
+        : null,
     createdAt: record?.createdAt || createdAt,
     updatedAt: createdAt,
     lifetimeSuccessfulGenerations: Math.max(0, Math.trunc(record?.lifetimeSuccessfulGenerations ?? 0)),
@@ -498,6 +515,25 @@ export async function getGenerationEntitlement(
   return evaluateRecord(record, env);
 }
 
+export async function getGenerationBalance(
+  userId: string,
+  env: EntitlementEnv = process.env,
+  now = new Date(),
+  store: EntitlementStoreAdapter = createEntitlementStore(env)
+): Promise<GenerationBalance> {
+  const record = normalizeRecord(await store.readUser(userId), env, now);
+  const starterLimit = record.plan === 'free' ? intFromEnv(env.ECHO_FREE_STARTER_GENERATIONS, 8) : 0;
+  const monthlyLimit = monthlyLimitForPlan(record.plan, env);
+  const remainingStarter = Math.max(0, starterLimit - record.lifetimeSuccessfulGenerations);
+  const remainingMonthly = Math.max(0, monthlyLimit - record.monthlyGenerationUsed);
+
+  return {
+    currentPlan: record.lastPurchasedPlan ?? record.plan,
+    quotaPlan: record.plan,
+    remainingGenerations: remainingStarter + remainingMonthly + record.extraCredits,
+  };
+}
+
 export async function consumeGenerationEntitlement(
   userId: string,
   env: EntitlementEnv = process.env,
@@ -537,7 +573,8 @@ export async function grantExtraCredits(
   credits: number,
   env: EntitlementEnv = process.env,
   now = new Date(),
-  store: EntitlementStoreAdapter = createEntitlementStore(env)
+  store: EntitlementStoreAdapter = createEntitlementStore(env),
+  purchasePlan?: PaidGenerationPlan
 ): Promise<UserEntitlementRecord> {
   const normalizedCredits = Math.trunc(credits);
   if (!userId.trim()) throw new Error('userId is required');
@@ -546,11 +583,12 @@ export async function grantExtraCredits(
   }
 
   if (store.grantExtraCredits) {
-    return store.grantExtraCredits(userId, normalizedCredits, now);
+    return store.grantExtraCredits(userId, normalizedCredits, now, purchasePlan);
   }
 
   const record = normalizeRecord(await store.readUser(userId), env, now);
   record.extraCredits += normalizedCredits;
+  if (purchasePlan) record.lastPurchasedPlan = purchasePlan;
   record.updatedAt = now.toISOString();
   await store.writeUser(userId, record);
   return record;
