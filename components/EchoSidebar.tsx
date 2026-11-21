@@ -709,12 +709,12 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('home')}
-              className={`relative z-[1] flex-1 min-w-0 rounded-full border-0 cursor-pointer px-2 py-2 text-[14px] transition-[background,color] duration-200 ease-out ${
+              className={`relative z-[1] flex-1 min-w-0 rounded-full border-0 cursor-pointer px-2 py-2 text-[20px] transition-[background,color] duration-200 ease-out ${
                 activeTab === 'home' ? '' : 'hover:bg-black/[0.06]'
               }`}
               style={{
-                fontFamily: '"Plus Jakarta Sans", "Helvetica Neue", Helvetica, Arial, sans-serif',
-                fontWeight: activeTab === 'home' ? 700 : 500,
+                fontFamily: AUTH_FONT,
+                fontWeight: 700,
                 color: activeTab === 'home' ? navActive : navInactive,
               }}
             >
@@ -723,12 +723,12 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('gallery')}
-              className={`relative z-[1] flex-1 min-w-0 rounded-full border-0 cursor-pointer px-2 py-2 text-[14px] transition-[background,color] duration-200 ease-out ${
+              className={`relative z-[1] flex-1 min-w-0 rounded-full border-0 cursor-pointer px-2 py-2 text-[20px] transition-[background,color] duration-200 ease-out ${
                 activeTab === 'gallery' ? '' : 'hover:bg-black/[0.06]'
               }`}
               style={{
-                fontFamily: '"Plus Jakarta Sans", "Helvetica Neue", Helvetica, Arial, sans-serif',
-                fontWeight: activeTab === 'gallery' ? 700 : 500,
+                fontFamily: AUTH_FONT,
+                fontWeight: 700,
                 color: activeTab === 'gallery' ? navActive : navInactive,
               }}
             >
