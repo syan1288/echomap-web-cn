@@ -95,9 +95,88 @@
   max-width: 100%;
 }
 
+.mobile-home-screen .auth-mobile-sheet {
+  max-width: none;
+}
+
 .mobile-auth-stage,
 .mobile-auth-stage-form {
   min-height: 0;
+}
+
+.auth-mobile-sign-in-form {
+  gap: clamp(0.25rem, 0.8vh, 0.5rem);
+}
+
+.auth-mobile-sign-in-form .mobile-auth-title {
+  font-size: clamp(1.75rem, 7vw, 2.2rem) !important;
+  line-height: 1;
+}
+
+.auth-mobile-sign-in-form > label {
+  margin-top: 0.2rem !important;
+  font-size: clamp(1rem, 4vw, 1.2rem) !important;
+  line-height: 1.05;
+}
+
+.auth-mobile-sign-in-form > div:nth-of-type(1),
+.auth-mobile-sign-in-form > div:nth-of-type(2) {
+  min-height: clamp(2.75rem, 5vh, 3.25rem) !important;
+}
+
+.auth-mobile-sign-in-form > button {
+  font-size: clamp(0.9rem, 3.8vw, 1rem) !important;
+  line-height: 1.1;
+}
+
+.auth-mobile-sign-in-form > div:last-child {
+  margin-top: clamp(0.75rem, 1.5vh, 1.25rem) !important;
+  gap: clamp(0.75rem, 2vw, 1rem) !important;
+  padding-top: 0.5rem !important;
+}
+
+.auth-mobile-sign-in-form > div:last-child button {
+  min-height: clamp(2.75rem, 5vh, 3.5rem) !important;
+  font-size: clamp(1rem, 4vw, 1.2rem) !important;
+}
+
+.auth-mobile-sign-up-sheet .mobile-auth-content {
+  gap: clamp(0.25rem, 0.8vh, 0.5rem);
+}
+
+.auth-mobile-sign-up-sheet .mobile-auth-content > h2 {
+  font-size: clamp(1.75rem, 7vw, 2.2rem) !important;
+  line-height: 1;
+}
+
+.auth-mobile-sign-up-sheet .mobile-auth-content > div:nth-of-type(1) {
+  margin-top: 0.25rem !important;
+  min-height: clamp(2.75rem, 5vh, 3.25rem) !important;
+}
+
+.auth-mobile-sign-up-sheet .mobile-auth-content > div:nth-of-type(2) {
+  margin-top: clamp(1rem, 2.4vh, 1.5rem) !important;
+}
+
+.auth-mobile-sign-up-sheet .mobile-auth-content > div:nth-of-type(2) > div {
+  min-height: clamp(2.75rem, 5vh, 3.25rem) !important;
+}
+
+.auth-mobile-sign-up-sheet .mobile-auth-content > p {
+  margin-top: 0 !important;
+  font-size: clamp(0.75rem, 3vw, 1rem) !important;
+  line-height: 1.1;
+}
+
+.auth-mobile-sign-up-sheet .mobile-auth-content > div:last-child {
+  margin-top: clamp(0.75rem, 1.5vh, 1.25rem) !important;
+  gap: clamp(0.75rem, 2vw, 1rem) !important;
+  padding-top: 0.5rem !important;
+}
+
+.auth-mobile-sign-up-sheet .mobile-auth-action {
+  min-height: clamp(2.75rem, 5vh, 3.5rem) !important;
+  font-size: clamp(1rem, 4vw, 1.2rem) !important;
 }
 
 .mobile-auth-stage-brand {

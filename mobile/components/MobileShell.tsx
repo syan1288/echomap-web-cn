@@ -1302,7 +1302,7 @@ function LoginScreen() {
         >
           <BrandBlock showSubtitle={authStage === 'welcome'} />
         </div>
-        <div className={`w-full shrink-0 ${authStage === 'welcome' ? 'max-w-[360px] -translate-y-8 pb-[8dvh]' : 'mobile-auth-stage-form flex flex-1 flex-col'}`}>
+        <div className={`w-full shrink-0 ${authStage === 'welcome' ? 'max-w-[360px] -translate-y-8 pb-[8dvh]' : 'mobile-auth-stage-form flex flex-1 flex-col justify-end'}`}>
           <AuthPanel mobileLayout onStageChange={setAuthStage} />
         </div>
       </div>

@@ -65,7 +65,7 @@ test('remembered accounts open the Echo Map password sign-in form instead of sen
   assert.ok(rememberedHandler, 'remembered-account handler should exist');
   assert.match(rememberedHandler[1], /setEmail\(recentEmail\)/);
   assert.match(rememberedHandler[1], /setPassword\(''\)/);
-  assert.match(rememberedHandler[1], /go\('emailSignIn'\)/);
+  assert.match(rememberedHandler[1], /openEmailSignIn\(\)/);
   assert.doesNotMatch(rememberedHandler[1], /sendEmailSignInCode|emailSignInCode|verifyOtp/);
   assert.match(authPanel, /signInWithEmail\(email, password\)/);
   assert.doesNotMatch(authPanel, /case 'emailSignInCode'/);
@@ -92,7 +92,7 @@ test('web sidebar auth overlay is translucent, centered, full-height, and keeps 
 test('embedded saved-account chooser keeps alternate-account action with the shared feedback footer', () => {
   const authPanel = read('../components/AuthPanel.tsx');
 
-  assert.match(authPanel, /my-auto flex w-full flex-col \$\{embedded \? 'gap-3' : 'gap-4'\}/);
+  assert.match(authPanel, /flex w-full flex-col \$\{embedded \? 'gap-3' : 'gap-4'\}/);
   assert.match(authPanel, /authSignInWithAnotherAccountButton/);
   assert.match(authPanel, /auth-feedback-footer/);
 });
@@ -136,6 +136,10 @@ test('sign-up chooser offers email and Google signup as direct actions with back
   assert.match(signUpChooser, /authBack/);
   assert.match(signUpChooser, /authAlreadyHaveAccountLabel/);
   assert.match(signUpChooser, /authSignInAction/);
+  assert.match(authPanel, /const goToSignIn = \(\) => \{[\s\S]*?if \(recentEmail\)[\s\S]*?go\('signInChooser'\)[\s\S]*?setEmailSignInReturnStage\('signUpChooser'\)[\s\S]*?go\('emailSignIn'\)/);
+  assert.match(authPanel, /setEmailSignInReturnStage\('signUpChooser'\)[\s\S]*?go\('emailSignIn'\)/);
+  assert.match(signUpChooser, /onClick=\{goToSignIn\}/);
+  assert.match(authPanel, /onClick=\{\(\) => go\(emailSignInReturnStage\)\}/);
   assert.doesNotMatch(signUpChooser, /authOr/);
   assert.match(translations, /authSignUpWithGoogle: \{ en: 'Or sign up with Google', zh:/);
 });

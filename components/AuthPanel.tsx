@@ -365,6 +365,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
   const [hint, setHint] = useState<string | null>(null);
   const [codeSeconds, setCodeSeconds] = useState(0);
   const [passwordResetSeconds, setPasswordResetSeconds] = useState(0);
+  const [emailSignInReturnStage, setEmailSignInReturnStage] = useState<AuthStage>('signInChooser');
   const recentEmail = useMemo(() => readRecentEmail(), []);
   const recentAccountName = useMemo(() => recentEmail.split('@')[0] || recentEmail, [recentEmail]);
   const recentInitial = recentAccountName.trim().charAt(0).toUpperCase() || 'S';
@@ -410,6 +411,20 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
     setStage(nextStage);
     setHint(null);
     setBusy(false);
+  };
+
+  const goToSignIn = () => {
+    if (recentEmail) {
+      go('signInChooser');
+      return;
+    }
+    setEmailSignInReturnStage('signUpChooser');
+    go('emailSignIn');
+  };
+
+  const openEmailSignIn = (returnStage: AuthStage = 'signInChooser') => {
+    setEmailSignInReturnStage(returnStage);
+    go('emailSignIn');
   };
 
   const run = async (action: () => Promise<AuthResult>, onSuccess: () => void) => {
@@ -464,7 +479,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
     if (!recentEmail) return;
     setEmail(recentEmail);
     setPassword('');
-    go('emailSignIn');
+    openEmailSignIn();
   };
 
   const handleVerifyCode = () => {
@@ -542,7 +557,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
 
   const renderEmailSignIn = () => (
     mobileLayout ? (
-      <>
+      <div className="auth-mobile-sign-in-form flex min-h-0 w-full flex-1 flex-col">
         <h2 className={`m-0 ${mobileTitleClass}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT, fontWeight: 700 }}>
           {t('authMobileSignInTitle')}
         </h2>
@@ -566,15 +581,15 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
         />
         {renderPasswordResetAction(true)}
         <div className={embedded ? 'mt-3 grid w-full grid-cols-2 gap-3 pt-0' : 'mt-auto grid w-full grid-cols-2 gap-10 pt-10'}>
-          <AuthActionButton embedded={embedded} onClick={() => go('signInChooser')} variant="secondary" mobile compact>{t('authBack')}</AuthActionButton>
+          <AuthActionButton embedded={embedded} onClick={() => go(emailSignInReturnStage)} variant="secondary" mobile compact>{t('authBack')}</AuthActionButton>
           <AuthActionButton embedded={embedded} onClick={handleSignIn} variant="mobileFilled" mobile compact disabled={busy}>
             {busy ? t('authProcessing') : t('authSubmitSignIn')}
           </AuthActionButton>
         </div>
-      </>
+      </div>
     ) : (
     <>
-      <BackButton onClick={() => go('signInChooser')} label={t('authBack')} mobile={mobileLayout} />
+      <BackButton onClick={() => go(emailSignInReturnStage)} label={t('authBack')} mobile={mobileLayout} />
       <h2 className={`m-0 ${mobileLayout ? mobileTitleClass : 'text-center text-[15px]'}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT, fontWeight: 700 }}>
         {t('authSignInTitle')}
       </h2>
@@ -589,7 +604,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
   const renderSignInChooser = () => (
     mobileLayout ? (
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className={`my-auto flex w-full flex-col ${embedded ? 'gap-3' : 'gap-4'}`}>
+        <div className={`flex w-full flex-col ${embedded ? 'gap-3' : 'gap-4'}`}>
           <h2 className={`m-0 ${mobileTitleClass}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT, fontWeight: 700 }}>
             {t('authSignInChooserTitle')}
           </h2>
@@ -609,7 +624,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
           )}
           <AuthActionButton
             embedded={embedded}
-            onClick={() => go('emailSignIn')}
+            onClick={() => openEmailSignIn()}
             variant="mobileWelcome"
             mobile
           >
@@ -635,11 +650,13 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
           <button
             type="button"
             onClick={() => go('signUpChooser')}
-            className={`m-0 flex w-full cursor-pointer touch-manipulation items-center justify-center whitespace-nowrap border-0 bg-transparent px-2 ${embedded ? 'pt-3 text-[14px]' : 'pt-3 text-[16px]'}`}
+            className={`m-0 flex min-w-0 w-full cursor-pointer touch-manipulation items-center justify-center whitespace-normal break-words border-0 bg-transparent px-2 text-center ${embedded ? 'pt-3 text-[14px]' : 'pt-3 text-[16px]'}`}
             style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}
           >
-            {t('authDontHaveAccountLabel')}{' '}
-            <span className="underline decoration-1 underline-offset-2">{t('authSignUpAction')}</span>
+            <span className="block min-w-0 max-w-full whitespace-nowrap text-center text-[clamp(12px,4vw,16px)]">
+              {t('authDontHaveAccountLabel')}{' '}
+              <span className="underline decoration-1 underline-offset-2">{t('authSignUpAction')}</span>
+            </span>
           </button>
         </div>
       </div>
@@ -859,7 +876,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
       case 'signUpChooser':
         return mobileLayout ? (
           <div className="flex min-h-0 w-full flex-1 flex-col">
-            <div className={`my-auto flex w-full flex-col ${embedded ? 'gap-3' : 'gap-4'}`}>
+            <div className={`flex w-full flex-col ${embedded ? 'gap-3' : 'gap-4'}`}>
               <h2 className={`m-0 ${mobileTitleClass}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT, fontWeight: 700 }}>
                 {t('authMobileSignUpTitle')}
               </h2>
@@ -891,12 +908,14 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
               </AuthActionButton>
               <button
                 type="button"
-                onClick={() => go('signInChooser')}
-                className={`m-0 flex w-full cursor-pointer touch-manipulation items-center justify-center whitespace-nowrap border-0 bg-transparent px-2 ${embedded ? 'pt-3 text-[14px]' : 'pt-3 text-[16px]'}`}
+                onClick={goToSignIn}
+                className={`m-0 flex min-w-0 w-full cursor-pointer touch-manipulation items-center justify-center whitespace-normal break-words border-0 bg-transparent px-2 text-center ${embedded ? 'pt-3 text-[14px]' : 'pt-3 text-[16px]'}`}
                 style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}
               >
-                {t('authAlreadyHaveAccountLabel')}{' '}
-                <span className="underline decoration-1 underline-offset-2">{t('authSignInAction')}</span>
+                <span className="block min-w-0 max-w-full whitespace-nowrap text-center text-[clamp(12px,4vw,16px)]">
+                  {t('authAlreadyHaveAccountLabel')}{' '}
+                  <span className="underline decoration-1 underline-offset-2">{t('authSignInAction')}</span>
+                </span>
               </button>
             </div>
           </div>
@@ -912,7 +931,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
             <AuthActionButton onClick={handleGoogle} variant="secondary">
               <span className="text-[15px] font-semibold">G</span>{t('authSignUpWithGoogle')}
             </AuthActionButton>
-            <button type="button" onClick={() => go('signInChooser')} className="cursor-pointer border-0 bg-transparent p-0 text-[12px]" style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}>
+            <button type="button" onClick={goToSignIn} className="cursor-pointer border-0 bg-transparent p-0 text-[12px]" style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}>
               <span>{t('authAlreadyHaveAccountLabel')}</span>{' '}
               <span className="underline decoration-1 underline-offset-2">{t('authSignInAction')}</span>
             </button>
@@ -949,12 +968,17 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
   const centerEmbeddedStage = isEmbeddedMobile && stage !== 'welcome';
   const isMobilePanel = mobileLayout && stage !== 'welcome';
   const isMobileSheet = isMobilePanel && !embedded;
+  const mobileSheetStageClass = stage === 'emailSignUp'
+    ? 'auth-mobile-sign-up-sheet'
+    : stage === 'emailSignIn'
+      ? 'auth-mobile-sign-in-sheet'
+      : '';
 
   return (
     <div
       className={`flex w-full flex-col items-center ${
         isMobileSheet
-          ? 'auth-mobile-sheet min-h-full flex-1 -mx-[1.75rem] w-[calc(100%+3.5rem)] rounded-t-[4.25rem] bg-[#e8f1ff] px-7 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[clamp(1rem,2.4vh,2rem)]'
+          ? `auth-mobile-sheet ${mobileSheetStageClass} h-[39dvh] flex-none -mx-[1.75rem] w-[calc(100%+3.5rem)] rounded-t-[4.25rem] bg-[#e8f1ff] px-7 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[clamp(1rem,2.4vh,2rem)]`
           : isEmbeddedMobile
             ? 'auth-embedded-panel min-h-0 flex-1 justify-center'
             : 'gap-3'
@@ -962,7 +986,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
       style={{
         fontFamily: AUTH_FONT,
         fontWeight: 700,
-        ...(isMobileSheet ? { minHeight: '44dvh' } : {}),
+        ...(isMobileSheet ? { height: '39dvh', minHeight: '39dvh', flex: '0 0 39dvh' } : {}),
       }}
     >
       <div className={`mobile-auth-content flex w-full flex-col ${isEmbeddedMobile ? 'gap-1 justify-center' : 'gap-3'} ${isMobilePanel ? 'min-h-0 flex-1' : ''} ${mobileLayout ? '' : 'w-full max-w-none'}`}>
@@ -977,7 +1001,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
         )}
       </div>
       {isMobilePanel && (
-        <div className="auth-feedback-footer flex min-h-[3.25rem] w-full shrink-0 items-end justify-center px-1 pb-1">
+        <div className="auth-feedback-footer pointer-events-none flex min-h-[3.25rem] w-full shrink-0 items-end justify-center px-1 pb-1">
           {hint && (
             <p
               role="status"
