@@ -11,6 +11,7 @@ type AuthContextValue = {
   user: User | null;
   passwordRecovery: boolean;
   signInWithEmail: (email: string, password: string) => Promise<AuthResult>;
+  sendEmailSignInCode: (email: string) => Promise<AuthResult>;
   sendEmailSignupCode: (email: string) => Promise<AuthResult>;
   verifyEmailSignupCode: (email: string, token: string) => Promise<AuthResult>;
   setPasswordForCurrentUser: (password: string, displayName?: string) => Promise<AuthResult>;
@@ -26,6 +27,9 @@ function errMessage(err: AuthError | null): string {
   if (!err) return 'Unknown error';
   if (err.message === 'Invalid login credentials') return 'Email or password is incorrect';
   if (err.message.includes('Email not confirmed')) return 'Please confirm your email before signing in';
+  if (err.message.toLowerCase().includes('unsupported provider') || err.message.toLowerCase().includes('provider is not enabled')) {
+    return 'Google sign-in is not enabled';
+  }
   return err.message;
 }
 
@@ -65,6 +69,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const trimmed = email.trim();
     if (!trimmed || !password) return { ok: false, message: 'Please enter email and password' };
     const { error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
+    if (error) return { ok: false, message: errMessage(error) };
+    return { ok: true };
+  }, []);
+
+  const sendEmailSignInCode = useCallback(async (email: string): Promise<AuthResult> => {
+    if (!supabase) return { ok: false, message: 'Supabase is not configured' };
+    const trimmed = email.trim();
+    if (!trimmed) return { ok: false, message: 'Please enter your email' };
+    const { error } = await supabase.auth.signInWithOtp({
+      email: trimmed,
+      options: { shouldCreateUser: false },
+    });
     if (error) return { ok: false, message: errMessage(error) };
     return { ok: true };
   }, []);
@@ -151,6 +167,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       user: session?.user ?? null,
       passwordRecovery,
       signInWithEmail,
+      sendEmailSignInCode,
       sendEmailSignupCode,
       verifyEmailSignupCode,
       setPasswordForCurrentUser,
@@ -164,6 +181,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       passwordRecovery,
       session,
       signInWithEmail,
+      sendEmailSignInCode,
       sendEmailSignupCode,
       verifyEmailSignupCode,
       setPasswordForCurrentUser,

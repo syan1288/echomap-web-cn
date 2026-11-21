@@ -13,6 +13,7 @@ import { ICON_STROKE_WIDTH } from '../shared/ui/iconTokens';
 /** 2.1.1 品牌蓝（echo-map-unified-description.md） */
 const BRAND_BLUE = '#0053D4';
 const PANEL_BG = '#c6ddff';
+const AUTH_FONT = '"Comfortaa", cursive';
 /** 仅自上而下渐变，无左右方向；保持蓝色系 */
 const PANEL_STACK = `
   linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(210,228,255,0.75) 38%, rgba(180,205,245,0.98) 100%),
@@ -185,6 +186,8 @@ export interface EchoSidebarProps {
   galleryStatsSlot: React.ReactNode;
   /** 侧栏底部固定区（如云端登录） */
   footerSlot?: React.ReactNode;
+  /** 登录流程进入表单后才显示底部半透明承载面板 */
+  footerHasSurface?: boolean;
   imageProvider: ImageProvider;
   imageProviderAvailability?: Partial<Record<ImageProvider, boolean>> | null;
   onImageProviderChange: (provider: ImageProvider) => void;
@@ -197,6 +200,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
   homeStatusSlot,
   galleryStatsSlot,
   footerSlot,
+  footerHasSurface = true,
   imageProvider,
   imageProviderAvailability,
   onImageProviderChange,
@@ -750,16 +754,18 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
               <EchoSidebarBrandIllustration />
             </div>
 
-            <p
-              className="m-0 w-[68%] max-w-[300px] shrink-0 text-center text-[15px] leading-[1.25] px-1"
-              style={{
-                color: BRAND_BLUE,
-                fontFamily: '"Plus Jakarta Sans", "Helvetica Neue", Helvetica, Arial, sans-serif',
-                fontWeight: 400,
-              }}
-            >
-              {t('sidebarTagline')}
-            </p>
+            {(!footerSlot || user) && (
+              <p
+                className="m-0 w-[68%] max-w-[300px] shrink-0 text-center text-[15px] leading-[1.25] px-1"
+                style={{
+                  color: BRAND_BLUE,
+                  fontFamily: AUTH_FONT,
+                  fontWeight: 700,
+                }}
+              >
+                {t('sidebarTagline')}
+              </p>
+            )}
 
             <div className="mt-[4vh] flex w-full max-w-[320px] flex-1 min-h-0 flex-col items-stretch">
               {activeTab === 'home' && <div className="w-full">{homeStatusSlot}</div>}
@@ -774,7 +780,9 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
       )}
 
       {footerSlot && !collapsed && !user && (
-        <div className="relative z-[5] mt-auto w-full shrink-0 border-t border-black/10 pt-3">
+        <div className={`relative z-[5] mt-auto flex min-h-0 w-[calc(100%+2.5rem)] flex-[0_0_35%] -mx-5 -mb-[2.5vh] flex-col overflow-hidden rounded-t-[2rem] px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] ${
+          footerHasSurface ? 'bg-white/60 backdrop-blur-md' : 'bg-transparent'
+        }`}>
           {footerSlot}
         </div>
       )}
