@@ -123,6 +123,17 @@ test('sign-up chooser offers email and Google signup as direct actions with back
   assert.match(translations, /authSignUpWithGoogle: \{ en: 'Or sign up with Google', zh:/);
 });
 
+test('first Google OAuth session routes to a separate Echo Map password setup step', () => {
+  const authPanel = read('../components/AuthPanel.tsx');
+  const authContext = read('../context/AuthContext.tsx');
+  const translations = read('../localization/translations.ts');
+
+  assert.match(authPanel, /setGooglePassword/);
+  assert.match(authPanel, /echomap_password_set/);
+  assert.match(authContext, /echomap_password_set:\s*true/);
+  assert.match(translations, /authSetGooglePasswordTitle: \{ en: 'Set your Echo Map password', zh:/);
+});
+
 test('travel log calls the feeling field mood instead of moon', () => {
   const travelLog = read('../components/TravelLogModal.tsx');
 

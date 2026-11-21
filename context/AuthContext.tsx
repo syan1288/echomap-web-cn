@@ -114,7 +114,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (password.length < 6) return { ok: false, message: 'Password must be at least 6 characters' };
     const { data, error } = await supabase.auth.updateUser({
       password,
-      ...(displayName?.trim() ? { data: { full_name: displayName.trim() } } : {}),
+      data: {
+        ...(session?.user?.user_metadata ?? {}),
+        echomap_password_set: true,
+        ...(displayName?.trim() ? { full_name: displayName.trim() } : {}),
+      },
     });
     if (error) return { ok: false, message: errMessage(error) };
     if (data.user) {
@@ -122,7 +126,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setSession(refreshed.data.session);
     }
     return { ok: true };
-  }, []);
+  }, [session?.user?.user_metadata]);
 
   const requestPasswordReset = useCallback(async (email: string): Promise<AuthResult> => {
     if (!supabase) return { ok: false, message: 'Supabase is not configured' };

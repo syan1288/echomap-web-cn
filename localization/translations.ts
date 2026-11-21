@@ -235,6 +235,12 @@ export const translations: { [key: string]: { [lang in Language]: string } } = {
   authVerificationCodeSent: { en: 'Verification code sent. Check your email.', zh: '验证码已发送，请查收邮件。' },
   authEmailCodeHint: { en: 'Use the code from your email to continue.', zh: '请输入邮件中的验证码继续。' },
   authSetPasswordTitle: { en: 'Set your password', zh: '设置密码' },
+  authSetGooglePasswordTitle: { en: 'Set your Echo Map password', zh: '设置 Echo Map 应用密码' },
+  authSetGooglePasswordHint: {
+    en: 'This password is only for Echo Map. It is not your Google password.',
+    zh: '这是 Echo Map 独立使用的密码，不是你的 Google 密码。',
+  },
+  authSavePassword: { en: 'Save password', zh: '保存密码' },
   authNewPassword: { en: 'Password', zh: '密码' },
   authForgetPassword: { en: 'Forget password?', zh: '忘记密码？' },
   authCheckEmailToResetCountdown: {

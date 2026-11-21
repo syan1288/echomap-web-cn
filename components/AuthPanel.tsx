@@ -25,6 +25,7 @@ export type AuthStage =
   | 'signUpChooser'
   | 'emailSignUp'
   | 'setPassword'
+  | 'setGooglePassword'
   | 'resetPassword';
 
 type InputType = 'email' | 'password' | 'text';
@@ -45,6 +46,24 @@ function saveRecentEmail(email: string): void {
   } catch {
     // Local storage is optional; authentication still works without it.
   }
+}
+
+function needsGooglePasswordSetup(user: unknown): boolean {
+  if (!user || typeof user !== 'object') return false;
+  const record = user as {
+    app_metadata?: { provider?: unknown; providers?: unknown };
+    identities?: Array<{ provider?: unknown }> | null;
+    user_metadata?: { echomap_password_set?: unknown };
+  };
+  if (record.user_metadata?.echomap_password_set === true) return false;
+  const appProviders = [
+    record.app_metadata?.provider,
+    ...(Array.isArray(record.app_metadata?.providers) ? record.app_metadata.providers : []),
+  ];
+  const identityProviders = Array.isArray(record.identities)
+    ? record.identities.map((identity) => identity?.provider)
+    : [];
+  return [...appProviders, ...identityProviders].some((provider) => provider === 'google');
 }
 
 function IconArrow() {
@@ -332,7 +351,9 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
     signOut,
   } = useAuth();
 
-  const [stage, setStage] = useState<AuthStage>('welcome');
+  const [stage, setStage] = useState<AuthStage>(() => (
+    needsGooglePasswordSetup(user) ? 'setGooglePassword' : 'welcome'
+  ));
   const [email, setEmail] = useState('');
   const [codeSentForEmail, setCodeSentForEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -356,8 +377,13 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
       setPassword('');
       setHint(null);
       setStage('resetPassword');
+    } else if (needsGooglePasswordSetup(user)) {
+      setEmail(user?.email ?? '');
+      setPassword('');
+      setHint(null);
+      setStage('setGooglePassword');
     }
-  }, [passwordRecovery, user?.email]);
+  }, [passwordRecovery, user]);
 
   useEffect(() => {
     if (codeSeconds <= 0) return undefined;
@@ -376,7 +402,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
   }, [passwordResetSeconds]);
 
   if (!configured || loading) return null;
-  if (user && stage !== 'setPassword' && stage !== 'resetPassword') return null;
+  if (user && stage !== 'setPassword' && stage !== 'setGooglePassword' && stage !== 'resetPassword') return null;
 
   const go = (nextStage: AuthStage) => {
     setStage(nextStage);
@@ -490,6 +516,17 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
         setStage('welcome');
         setPassword('');
         setAccountName('');
+        setHint(null);
+      },
+    );
+  };
+
+  const handleSetGooglePassword = () => {
+    void run(
+      () => setPasswordForCurrentUser(password),
+      () => {
+        setStage('welcome');
+        setPassword('');
         setHint(null);
       },
     );
@@ -835,6 +872,34 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
     </>
   );
 
+  const renderSetGooglePassword = () => (
+    <>
+      <h2 className={`m-0 ${mobileLayout ? mobileTitleClass : 'text-center text-[15px]'}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT, fontWeight: 700 }}>
+        {t('authSetGooglePasswordTitle')}
+      </h2>
+      <p className={`m-0 w-full text-left ${embedded ? 'text-[12px]' : 'text-[13px]'}`} style={{ color: BRAND_BLUE, fontFamily: AUTH_FONT }}>
+        {t('authSetGooglePasswordHint')}
+      </p>
+      <AuthGlassInput
+        embedded={embedded}
+        type="password"
+        value={password}
+        onChange={setPassword}
+        placeholder={mobileLayout ? '' : t('authNewPassword')}
+        leftIcon={mobileLayout ? undefined : <IconPassword />}
+        onSubmit={handleSetGooglePassword}
+        showSubmit={!mobileLayout}
+        showPasswordToggle={mobileLayout}
+        autoComplete="new-password"
+        submitLabel={t('authSubmitLabel')}
+        mobile={mobileLayout}
+      />
+      <AuthActionButton embedded={embedded} onClick={handleSetGooglePassword} disabled={busy} mobile={mobileLayout}>
+        {busy ? t('authProcessing') : t('authSavePassword')}
+      </AuthActionButton>
+    </>
+  );
+
   const renderResetPassword = () => (
     <>
       <BackButton onClick={() => go('emailSignIn')} label={t('authBack')} mobile={mobileLayout} />
@@ -935,6 +1000,8 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
         return renderEmailSignUp();
       case 'setPassword':
         return renderSetPassword();
+      case 'setGooglePassword':
+        return renderSetGooglePassword();
       case 'resetPassword':
         return renderResetPassword();
       case 'welcome':
