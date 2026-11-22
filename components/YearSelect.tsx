@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 const COMFORTAA_FONT = '"Comfortaa", cursive';
-const BLUE = '#1687ff';
-const SKY_BLUE = '#c6ddff';
+const PANEL_BORDER = '#ece7df';
 
 export interface YearSelectProps {
   label: string;
@@ -47,7 +46,7 @@ export const YearSelect: React.FC<YearSelectProps> = ({
         className="flex min-h-7 w-full items-center justify-between gap-2 border-0 bg-transparent px-0 py-0 text-left transition-colors hover:text-[#5f5954] focus-visible:outline-none focus-visible:ring-0"
         style={{
           fontFamily: COMFORTAA_FONT,
-          fontSize: 15,
+          fontSize: 13,
           color: '#756f6c',
         }}
         aria-haspopup="listbox"
@@ -78,7 +77,7 @@ export const YearSelect: React.FC<YearSelectProps> = ({
         <div
           className="absolute left-0 top-[calc(100%+4px)] z-50 w-full overflow-y-auto rounded-[8px] border bg-white p-1 shadow-[0_8px_20px_rgba(17,17,17,0.12)]"
           style={{
-            borderColor: BLUE,
+            borderColor: PANEL_BORDER,
             maxHeight: 5 * 32 + 8,
             overscrollBehavior: 'contain',
           }}
@@ -93,12 +92,12 @@ export const YearSelect: React.FC<YearSelectProps> = ({
                 type="button"
                 role="option"
                 aria-selected={selected}
-                className="flex min-h-8 w-full items-center justify-between rounded-[6px] border border-transparent px-2.5 py-1 text-left transition-colors hover:border-[#1687ff] hover:bg-[#c6ddff]/65 focus-visible:border-[#1687ff] focus-visible:bg-[#c6ddff]/65 focus-visible:outline-none"
+                className="flex min-h-8 w-full items-center justify-between rounded-[6px] border border-transparent px-2.5 py-1 text-left transition-colors hover:bg-[#f7f4ee] focus-visible:bg-[#f7f4ee] focus-visible:outline-none"
                 style={{
                   fontFamily: COMFORTAA_FONT,
                   fontSize: 12,
                   color: '#111',
-                  backgroundColor: selected ? SKY_BLUE : 'white',
+                  backgroundColor: 'white',
                 }}
                 onClick={() => {
                   onChange(option);
