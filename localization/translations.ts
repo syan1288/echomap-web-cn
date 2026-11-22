@@ -148,16 +148,16 @@ export const translations: { [key: string]: { [lang in Language]: string } } = {
     zh: '新用户 8 次生图，之后每月 1 次。20 个 saved landmark，500 张照片。',
   },
   helpPlanPlusName: { en: 'Plus', zh: 'Plus 版' },
-  helpPlanPlusPrice: { en: '¥5 / month', zh: '¥5 / 月' },
+  helpPlanPlusPrice: { en: '¥5.9 / package', zh: '¥5.9 / 次数包' },
   helpPlanPlusDetail: {
     en: '20 image generations per month. 100 saved landmarks and 1,000 photos.',
     zh: '每月 20 次生图。100 个 saved landmark，1,000 张照片。',
   },
   helpPlanProName: { en: 'Pro', zh: 'Pro 版' },
-  helpPlanProPrice: { en: '¥12.9 / month', zh: '¥12.9 / 月' },
+  helpPlanProPrice: { en: '¥11.9 / package', zh: '¥11.9 / 次数包' },
   helpPlanProDetail: {
-    en: '60 image generations per month. 500 saved landmarks and 3,000 photos.',
-    zh: '每月 60 次生图。500 个 saved landmark，3,000 张照片。',
+    en: '40 image generations in the one-time package. 500 saved landmarks and 3,000 photos.',
+    zh: '一次性 40 次生图额度包。500 个 saved landmark，3,000 张照片。',
   },
   addBuildingAiNote: {
     en: 'By uploading, you confirm you have rights to the image and accept AI processing under our terms.',

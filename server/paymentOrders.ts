@@ -557,8 +557,8 @@ function planFromEnv(
 
 export function listPaymentPlans(env: PaymentEnv = process.env): PaymentPlan[] {
   return [
-    planFromEnv('plus', env, { name: 'Plus', amountCny: 5, credits: 20 }),
-    planFromEnv('pro', env, { name: 'Pro', amountCny: 12.9, credits: 60 }),
+    planFromEnv('plus', env, { name: 'Plus', amountCny: 5.9, credits: 20 }),
+    planFromEnv('pro', env, { name: 'Pro', amountCny: 11.9, credits: 40 }),
   ];
 }
 

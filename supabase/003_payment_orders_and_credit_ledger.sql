@@ -234,7 +234,7 @@ create or replace function public.consume_generation_entitlement(
   p_free_starter_limit integer default 8,
   p_free_monthly_limit integer default 1,
   p_plus_monthly_limit integer default 20,
-  p_pro_monthly_limit integer default 60,
+  p_pro_monthly_limit integer default 40,
   p_now timestamptz default now()
 )
 returns jsonb

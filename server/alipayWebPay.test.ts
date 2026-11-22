@@ -131,7 +131,7 @@ test('Alipay page form uses the SDK pageExec POST flow and includes the return U
     },
     {
       orderId: 'pay_test_123',
-      amountCny: '12.90',
+      amountCny: '11.90',
       subject: 'Echo Map Pro',
     },
   );
@@ -140,7 +140,7 @@ test('Alipay page form uses the SDK pageExec POST flow and includes the return U
   assert.match(html, /method="post"/u);
   assert.match(html, /alipay\.trade\.page\.pay/u);
   assert.match(html, /pay_test_123/u);
-  assert.match(html, /12\.90/u);
+  assert.match(html, /11\.90/u);
   assert.match(html, /FAST_INSTANT_TRADE_PAY/u);
   assert.match(html, /example\.test/u);
 });

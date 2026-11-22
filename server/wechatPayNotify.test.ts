@@ -69,7 +69,7 @@ test('handleWechatPayNotify confirms a signed successful payment and grants cred
         out_trade_no: order.id,
         transaction_id: 'wx_transaction_001',
         trade_state: 'SUCCESS',
-        amount: { total: 500, currency: 'CNY' },
+        amount: { total: 590, currency: 'CNY' },
       },
       apiV3Key
     );
@@ -113,7 +113,7 @@ test('handleWechatPayNotify rejects invalid signatures before granting credits',
           out_trade_no: order.id,
           transaction_id: 'wx_transaction_002',
           trade_state: 'SUCCESS',
-          amount: { total: 500, currency: 'CNY' },
+          amount: { total: 590, currency: 'CNY' },
         },
         apiV3Key
       ),

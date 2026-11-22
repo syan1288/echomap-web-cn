@@ -38,8 +38,8 @@ test('listPaymentPlans exposes configured manual payment plans', () => {
       enabled: plan.enabled,
     })),
     [
-      { id: 'plus', amountCny: 5, credits: 20, enabled: true },
-      { id: 'pro', amountCny: 12.9, credits: 60, enabled: true },
+      { id: 'plus', amountCny: 5.9, credits: 20, enabled: true },
+      { id: 'pro', amountCny: 11.9, credits: 40, enabled: true },
     ]
   );
 });
@@ -92,8 +92,8 @@ test('concurrent confirmations for separate orders preserve both credit grants',
     const second = await createPaymentOrder({ userId: 'user_concurrent', planId: 'plus' }, env, now);
 
     await Promise.all([
-      confirmPaymentOrder({ orderId: first.id, amountFen: 500 }, env, now),
-      confirmPaymentOrder({ orderId: second.id, amountFen: 500 }, env, now),
+      confirmPaymentOrder({ orderId: first.id, amountFen: 590 }, env, now),
+      confirmPaymentOrder({ orderId: second.id, amountFen: 590 }, env, now),
     ]);
 
     const entitlement = await getGenerationEntitlement('user_concurrent', env, now);
@@ -118,7 +118,7 @@ test('background Alipay reconciliation confirms paid pending orders and grants c
       userId: 'user_reconcile',
       planId: 'plus',
       planName: 'Plus',
-      amountCny: 5,
+      amountCny: 5.9,
       credits: 20,
       status: 'pending_alipay_payment',
       provider: 'alipay_page',
@@ -140,7 +140,7 @@ test('background Alipay reconciliation confirms paid pending orders and grants c
         status: 'PAID',
         orderId: order.id,
         tradeNo: 'trade_reconcile_1',
-        totalAmount: '5.00',
+        totalAmount: '5.90',
       }),
     );
 
@@ -168,7 +168,7 @@ test('Supabase payment store persists orders and confirms through the atomic dat
     user_id: '00000000-0000-4000-8000-000000000001',
     plan_id: 'plus',
     plan_name: 'Plus',
-    amount_cny: '5.00',
+    amount_cny: '5.90',
     credits: 20,
     status: 'pending_manual_confirmation',
     provider: 'manual',
@@ -213,7 +213,7 @@ test('Supabase payment store persists orders and confirms through the atomic dat
     userId: row.user_id,
     planId: 'plus',
     planName: 'Plus',
-    amountCny: 5,
+    amountCny: 5.9,
     credits: 20,
     status: 'pending_manual_confirmation',
     provider: 'manual',
@@ -228,12 +228,12 @@ test('Supabase payment store persists orders and confirms through the atomic dat
 
   const created = await store.create(order);
   const confirmed = await store.confirm(
-    { orderId: order.id, amountFen: 500, providerTransactionId: 'trade-001' },
+    { orderId: order.id, amountFen: 590, providerTransactionId: 'trade-001' },
     new Date('2026-11-19T00:01:00.000Z')
   );
 
   assert.equal(created.userId, order.userId);
-  assert.equal(created.amountCny, 5);
+  assert.equal(created.amountCny, 5.9);
   assert.equal(confirmed.status, 'confirmed');
   assert.deepEqual(calls, [
     {
@@ -244,7 +244,7 @@ test('Supabase payment store persists orders and confirms through the atomic dat
         user_id: order.userId,
         plan_id: 'plus',
         plan_name: 'Plus',
-        amount_cny: 5,
+        amount_cny: 5.9,
         credits: 20,
         status: 'pending_manual_confirmation',
         provider: 'manual',
@@ -262,7 +262,7 @@ test('Supabase payment store persists orders and confirms through the atomic dat
       name: 'confirm_payment_order',
       value: {
         p_order_id: order.id,
-        p_amount_fen: 500,
+        p_amount_fen: 590,
         p_provider_transaction_id: 'trade-001',
         p_confirmed_at: '2026-11-19T00:01:00.000Z',
       },

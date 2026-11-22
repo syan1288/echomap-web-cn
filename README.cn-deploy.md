@@ -171,20 +171,20 @@ SUPABASE_SECRET_KEY=your_supabase_secret_key
 ECHO_GENERATION_QUOTA_ENABLED=true
 ECHO_FREE_STARTER_GENERATIONS=8
 ECHO_FREE_MONTHLY_GENERATIONS=1
-# 验证期先用 file；多实例/正式生产切 supabase
-ECHO_ENTITLEMENTS_STORE=file
+# 正式生产使用 Supabase；file 只适合本地单进程验证
+ECHO_ENTITLEMENTS_STORE=supabase
 ECHO_ENTITLEMENTS_STORE_PATH=/home/ubuntu/apps/echomap-web-cn/logs/entitlements.json
 ECHO_ENTITLEMENTS_TABLE=echo_entitlements
 # 订单使用 Supabase 时，必须同时将 ECHO_ENTITLEMENTS_STORE 设为 supabase
-ECHO_PAYMENT_ORDERS_STORE=file
+ECHO_PAYMENT_ORDERS_STORE=supabase
 ECHO_PAYMENT_ORDERS_PATH=/home/ubuntu/apps/echomap-web-cn/logs/payment-orders.json
 ECHO_PAYMENT_PROVIDER=manual
 ECHO_PLUS_PAYMENT_URL=https://your-payment-page.example.com/plus
 ECHO_PRO_PAYMENT_URL=https://your-payment-page.example.com/pro
-ECHO_PLUS_PAYMENT_AMOUNT_CNY=5
-ECHO_PRO_PAYMENT_AMOUNT_CNY=12.9
+ECHO_PLUS_PAYMENT_AMOUNT_CNY=5.9
+ECHO_PRO_PAYMENT_AMOUNT_CNY=11.9
 ECHO_PLUS_PAYMENT_CREDITS=20
-ECHO_PRO_PAYMENT_CREDITS=60
+ECHO_PRO_PAYMENT_CREDITS=40
 
 # 官方微信支付 Native 自动开通时再切换：
 # ECHO_PAYMENT_PROVIDER=wechat_native
