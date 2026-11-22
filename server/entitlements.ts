@@ -285,7 +285,7 @@ export class SupabaseEntitlementStore implements EntitlementStoreAdapter {
     const { data, error } = await this.client.rpc('consume_generation_entitlement', {
       p_user_id: userId,
       p_free_starter_limit: intFromEnv(env.ECHO_FREE_STARTER_GENERATIONS, 8),
-      p_free_monthly_limit: intFromEnv(env.ECHO_FREE_MONTHLY_GENERATIONS, 2),
+      p_free_monthly_limit: intFromEnv(env.ECHO_FREE_MONTHLY_GENERATIONS, 1),
       p_plus_monthly_limit: intFromEnv(env.ECHO_PLUS_MONTHLY_GENERATIONS, 20),
       p_pro_monthly_limit: intFromEnv(env.ECHO_PRO_MONTHLY_GENERATIONS, 60),
       p_now: now.toISOString(),
@@ -362,7 +362,7 @@ function normalizeRecord(
 function monthlyLimitForPlan(plan: GenerationPlan, env: EntitlementEnv): number {
   if (plan === 'plus') return intFromEnv(env.ECHO_PLUS_MONTHLY_GENERATIONS, 20);
   if (plan === 'pro') return intFromEnv(env.ECHO_PRO_MONTHLY_GENERATIONS, 60);
-  return intFromEnv(env.ECHO_FREE_MONTHLY_GENERATIONS, 2);
+  return intFromEnv(env.ECHO_FREE_MONTHLY_GENERATIONS, 1);
 }
 
 function landmarkLimitForPlan(plan: GenerationPlan, env: EntitlementEnv): number {

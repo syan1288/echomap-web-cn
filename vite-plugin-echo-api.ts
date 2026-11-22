@@ -72,7 +72,7 @@ export interface EchoApiEnv {
   GOOGLE_SERVICE_ACCOUNT_JSON?: string;
   /**
    * Vertex 上用于出图的模型 ID（与控制台「任务」下拉无关，见 resolveImageModel 注释）。
-   * 例：gemini-2.5-flash-image（默认 GA）、gemini-3.1-flash-image-preview（Nano Banana 2）
+   * 例：gemini-3.1-flash-lite-image（默认低成本）、gemini-3.1-flash-image（高质量）
    */
   GEMINI_IMAGE_MODEL?: string;
   ECHO_IMAGE_MODEL?: string;
@@ -951,17 +951,15 @@ function createGenAI(env: EchoApiEnv): GoogleGenAI | null {
 }
 
 /**
- * 默认用 Vertex 文档中的 GA 模型 `gemini-2.5-flash-image`。
- * 旧名 `gemini-2.5-flash-image-preview` 会 404，勿用。
- * Nano Banana 2 对应 `gemini-3.1-flash-image-preview`（预览，需在项目/区域可用）。
+ * 默认使用低成本的 Gemini 3.1 Flash Lite Image。
+ *
+ * 模型名称通过 GEMINI_IMAGE_MODEL / ECHO_IMAGE_MODEL 覆盖，
+ * 为后续按成本、质量和可用性路由不同模型保留配置入口。
  */
 function resolveImageModel(env: EchoApiEnv): string {
   const explicit = env.GEMINI_IMAGE_MODEL?.trim() || env.ECHO_IMAGE_MODEL?.trim();
   if (explicit) return explicit;
-  if (env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim()) {
-    return 'gemini-2.5-flash-image-preview';
-  }
-  return 'gemini-2.5-flash-image';
+  return 'gemini-3.1-flash-lite-image';
 }
 
 /** 从 generateContent 响应中提取第一张内联图片；失败时返回可展示的诊断信息 */

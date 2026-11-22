@@ -224,7 +224,7 @@ function createGenAI(env: EchoApiEnv): GoogleGenAI | null {
 function resolveImageModel(env: EchoApiEnv): string {
   const explicit = env.GEMINI_IMAGE_MODEL?.trim() || env.ECHO_IMAGE_MODEL?.trim();
   if (explicit) return explicit;
-  return 'gemini-2.5-flash-image';
+  return 'gemini-3.1-flash-lite-image';
 }
 
 function extractInlineImageFromResponse(response: {

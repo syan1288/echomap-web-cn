@@ -170,7 +170,7 @@ SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
 SUPABASE_SECRET_KEY=your_supabase_secret_key
 ECHO_GENERATION_QUOTA_ENABLED=true
 ECHO_FREE_STARTER_GENERATIONS=8
-ECHO_FREE_MONTHLY_GENERATIONS=2
+ECHO_FREE_MONTHLY_GENERATIONS=1
 # 验证期先用 file；多实例/正式生产切 supabase
 ECHO_ENTITLEMENTS_STORE=file
 ECHO_ENTITLEMENTS_STORE_PATH=/home/ubuntu/apps/echomap-web-cn/logs/entitlements.json

@@ -20,8 +20,8 @@ export const translations: { [key: string]: { [lang in Language]: string } } = {
   balanceUpgradePlan: { en: 'Upgrade plan', zh: '升级套餐' },
   balanceGenerationsRemaining: { en: '{{count}} generations left', zh: '剩余 {{count}} 次生图' },
   balancePlanFreeDetail: {
-    en: '8 starter generations, then 2 each month.',
-    zh: '新用户 8 次体验额度，之后每月 2 次。',
+    en: '8 starter generations, then 1 each month.',
+    zh: '新用户 8 次体验额度，之后每月 1 次。',
   },
   balancePlanPurchasedDetail: {
     en: 'Your most recently purchased generation-credit package.',
@@ -143,8 +143,8 @@ export const translations: { [key: string]: { [lang in Language]: string } } = {
   helpPlanFreeName: { en: 'Free', zh: '免费版' },
   helpPlanFreePrice: { en: '¥0 / month', zh: '¥0 / 月' },
   helpPlanFreeDetail: {
-    en: 'Starter 8 image generations, then 2 per month. 20 saved landmarks and 500 photos.',
-    zh: '新用户 8 次生图，之后每月 2 次。20 个 saved landmark，500 张照片。',
+    en: 'Starter 8 image generations, then 1 per month. 20 saved landmarks and 500 photos.',
+    zh: '新用户 8 次生图，之后每月 1 次。20 个 saved landmark，500 张照片。',
   },
   helpPlanPlusName: { en: 'Plus', zh: 'Plus 版' },
   helpPlanPlusPrice: { en: '¥5 / month', zh: '¥5 / 月' },

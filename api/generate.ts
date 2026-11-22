@@ -724,11 +724,7 @@ function createGenAI(env: EchoApiEnv): GoogleGenAI | null {
 function resolveImageModel(env: EchoApiEnv): string {
   const explicit = env.GEMINI_IMAGE_MODEL?.trim() || env.ECHO_IMAGE_MODEL?.trim();
   if (explicit) return explicit;
-  if (env.GEMINI_API_KEY?.trim() || env.API_KEY?.trim()) {
-    // Reference implementation default
-    return 'gemini-2.5-flash-image-preview';
-  }
-  return 'gemini-2.5-flash-image';
+  return 'gemini-3.1-flash-lite-image';
 }
 
 function isBuildingStyleId(s: string | undefined | null): s is BuildingStyleId {

@@ -120,7 +120,7 @@ function createGenAI(env: EchoApiEnv): GoogleGenAI | null {
 }
 
 function resolveImageModel(env: EchoApiEnv): string {
-  return env.GEMINI_IMAGE_MODEL?.trim() || env.ECHO_IMAGE_MODEL?.trim() || 'gemini-2.5-flash-image';
+  return env.GEMINI_IMAGE_MODEL?.trim() || env.ECHO_IMAGE_MODEL?.trim() || 'gemini-3.1-flash-lite-image';
 }
 
 function resolveOpenAIImageModel(env: EchoApiEnv): string {

@@ -175,9 +175,9 @@ function isMobileModelId(value: string | null | undefined): value is MobileModel
 }
 
 function readStoredMobileModel(): MobileModelId {
-  if (typeof window === 'undefined') return 'gemini';
+  if (typeof window === 'undefined') return 'jimeng';
   const stored = window.localStorage.getItem(MOBILE_MODEL_STORAGE_KEY);
-  return isMobileModelId(stored) ? stored : 'gemini';
+  return isMobileModelId(stored) ? stored : 'jimeng';
 }
 
 function preferredImageModelFromMobileModel(model: MobileModelId): PreferredImageModel {
