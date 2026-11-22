@@ -11,7 +11,7 @@
 2. 准备微信支付商户号、API v3 密钥、商户私钥、平台公钥/证书。
 3. 确认 `https://echomap.syan12.cn/api/payments/wechat/notify` 可以公网访问。
 4. 切换 `ECHO_PAYMENT_PROVIDER=wechat_native`。
-5. 用 1 笔小额真实支付验证：订单创建、微信回调、`logs/payment-orders.json` 状态变为 `confirmed`、`logs/entitlements.json` 增加 `extraCredits`。
+5. 用 1 笔小额真实支付验证：订单创建、微信回调、`payment_orders` 状态变为 `confirmed`、`echo_entitlements.extra_credits` 增加，并检查 `credit_ledger` 写入一条 `grant` 流水。
 
 ## Vercel Production 环境变量
 
