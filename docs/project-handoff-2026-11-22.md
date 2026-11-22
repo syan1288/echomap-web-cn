@@ -1505,7 +1505,9 @@ ECHO_PAYMENT_PROVIDER
 
 已确认 `ECHO_ENTITLEMENTS_STORE=supabase`，生产额度数据走 Supabase。
 
-`ECHO_PAYMENT_ORDERS_STORE` 和 `ECHO_PAYMENT_PROVIDER` 被 Vercel 标记为 Secret，CLI 拉取时只返回 `[SENSITIVE]`，因此无法从 CLI 读取原值。需要在 Vercel Project Settings → Environment Variables 中查看或重新写入。订单存储应明确设置为 `supabase`；支付 provider 需以实际启用的平台为准。
+`ECHO_PAYMENT_ORDERS_STORE` 和 `ECHO_PAYMENT_PROVIDER` 被 Vercel 标记为 Secret，CLI 拉取时只返回 `[SENSITIVE]`，因此无法从 CLI 读取原值。当前已将 `ECHO_PAYMENT_ORDERS_STORE` 重新写入为 `supabase`；`ECHO_PAYMENT_PROVIDER` 保留现状，需在 Vercel Project Settings → Environment Variables 中按实际收款渠道核对。
+
+`supabase/003_payment_orders_and_credit_ledger.sql` 的 Pro 默认参数也已从 60 改为 40。生产 Serverless 会把 Vercel 的 `ECHO_PRO_MONTHLY_GENERATIONS=40` 传给 RPC；如果希望数据库函数在脱离应用直接调用时也保持 40，需要在 Supabase SQL Editor 重新执行该迁移文件。
 
 ### 16.3 自动模型路由还不是完整系统
 
