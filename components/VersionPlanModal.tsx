@@ -32,6 +32,24 @@ type PaymentOrder = {
   provider: 'manual' | 'wechat_native' | 'alipay_page';
 };
 
+const ICON_STROKE_WIDTH = 1.6;
+
+const IconChevronLeft: React.FC = () => (
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={ICON_STROKE_WIDTH}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden
+  >
+    <path d="m15 18-6-6 6-6" />
+  </svg>
+);
+
 export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, title }) => {
   const { t } = useLocalization();
   const { session, user } = useAuth();
@@ -250,10 +268,11 @@ export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, tit
           <div className="space-y-2">
             <button
               type="button"
-              className="border-0 bg-transparent p-0 text-[12px] text-[#666] hover:text-[#0053D4]"
+              className="flex items-center gap-2 border-0 bg-transparent p-0 text-[12px] text-[#666] hover:text-[#0053D4]"
               onClick={() => setPage('overview')}
             >
-              ‹ {t('balanceUpgradePlan')}
+              <IconChevronLeft />
+              <span>{t('balanceUpgradePlan')}</span>
             </button>
             {plansLoading && <p className="m-0 text-[13px]">{t('balancePlansLoading')}</p>}
             {!plansLoading && paymentPlans.length === 0 && (
