@@ -28,8 +28,8 @@
 | --- | --- |
 | 工作区 | `/Users/athena.xu/.codex/worktrees/legal-policy-pages/echomap-web-cn` |
 | 当前工作分支 | `main` |
-| 当前 HEAD | `2eb89ec fix: compact year selector menu` |
-| `origin/main` | `2eb89ec` |
+| 当前 HEAD | `0ab8ccf fix: show free plan price` |
+| `origin/main` | `0ab8ccf` |
 | 工作区状态 | 干净 |
 | GitHub 远端 | `git@github.com:syan1288/echomap-web-cn.git` |
 | GitHub HTTPS | `https://github.com/syan1288/echomap-web-cn` |
@@ -51,16 +51,16 @@ git rev-parse HEAD origin/main
 | Vercel 项目 | `echo-map` |
 | Vercel Project ID | `prj_npSfrF4Aw8Cv4axcgylC24j1a4pD` |
 | Vercel Team ID | `team_J2DAHL8pq37Ep6qVpsda5NzL` |
-| 最新已知 Production Deployment | `dpl_Dj3CPSQka6scL2zLQex8DhpxSsJB` |
+| 最新已知 Production Deployment | `dpl_APkc4yYaPEQL4xayXtqnnwmqY8yM` |
 | Deployment 状态 | `READY` |
-| Deployment URL | `https://echo-jhm0t3zui-syan1288s-projects.vercel.app` |
+| Deployment URL | `https://echo-qipzmt3me-syan1288s-projects.vercel.app` |
 | Vercel 默认域名 | `https://echo-map-phi.vercel.app` |
 | Vercel 项目默认别名 | `https://echo-map-syan1288s-projects.vercel.app` |
 | 部署命令 | `npx vercel --prod --yes` |
 | 构建命令 | `npm run build` |
 | 输出目录 | `dist` |
 
-截至本文档更新时间，`HEAD`、`origin/main` 与最近一次生产部署的功能状态一致，最近部署已包含 Year 下拉框逻辑。Vercel CLI 的 `inspect` 输出不一定显示 Git commit，因此换电脑后若要重新确认，应同时核对：
+截至本文档更新时间，`HEAD`、`origin/main` 与最近一次生产部署的功能状态一致。最近部署包含 Year 下拉框最终样式、Balance 返回箭头，以及 Free 当前套餐的 `¥0` 展示。Vercel CLI 的 `inspect` 输出不一定显示 Git commit，因此换电脑后若要重新确认，应同时核对：
 
 ```bash
 git rev-parse origin/main
@@ -500,6 +500,7 @@ Year 规则：
 - 可选范围到当前年份。
 - 选项少于 5 个时全部显示。
 - 超过 5 个时白色下拉弹层内部滚动，最多同时显示约 5 行。
+- 下拉弹层宽度约 `64px`，右侧与当前年份/箭头区域对齐，选中项浅灰色、无勾选、无圆角。
 - Web 和 Mobile 使用相同的年份计算规则。
 
 注册年份必须来自用户资料或注册时间，不能只根据当前浏览器日期猜测。若注册年份没有正确传入，年份选择器会退回当前年份，导致历史年份缺失。
@@ -1507,6 +1508,8 @@ Plus：¥5.9/20
 Pro：¥11.9/40
 ```
 
+Balance 的 Current plan 页面中，Free 套餐价格显示为 `¥0`；Plus / Pro 的价格来自服务端套餐配置。
+
 代码、支付 fallback、配置模板、Supabase RPC 默认值、页面文案和测试已按此规则统一。生产环境仍需确认 Vercel Production 的四个套餐变量已更新。
 
 ### 16.2 生产 store 值
@@ -1611,4 +1614,4 @@ git pull --ff-only origin main
 6. 生产额度和支付必须使用 Supabase 数据库，不要使用 Serverless 本地 JSON 文件。
 7. Secret 不能靠 Git 找回；大多数情况是轮换后更新 Vercel、Supabase 或供应商控制台。
 8. 修改额度时要同时检查环境变量、Supabase RPC、服务端 fallback、页面文案和测试。
-9. 当前快照是 `2eb89ec`，生产别名是 `https://echomap.syan12.cn`。
+9. 当前快照是 `0ab8ccf`，生产别名是 `https://echomap.syan12.cn`；最新部署状态为 `READY`。
