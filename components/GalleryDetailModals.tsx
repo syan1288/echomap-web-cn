@@ -342,11 +342,11 @@ export const GalleryDetailModals: React.FC<GalleryDetailModalsProps> = ({
           </div>
           <div>
             <p className="text-sm m-0 mb-1" style={{ fontFamily: FONT_TITLE, fontWeight: 600 }}>
-              Moon
+              Mood
             </p>
             <div className="flex items-stretch justify-end gap-2">
               <div className="min-h-[40px] min-w-0 flex-1 border border-black bg-white px-3 py-2 text-sm text-neutral-500 rounded-none">
-                {log.moon || 'Type your moon……'}
+                {log.moon || 'Type your mood……'}
               </div>
               <div className="shrink-0 border border-black bg-white">
                 <MoonFaceAvatar moon={log.moon} avatarVariant={log.avatarVariant} size={40} interactive={false} />
