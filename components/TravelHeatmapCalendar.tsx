@@ -1,9 +1,10 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ProcessedImage } from '../web/app/webMemoryTypes';
 import { useLocalization } from '../context/LocalizationContext';
 import {
   aggregateUploadsByDay,
   buildYearHeatmapCells,
+  getHeatmapYearOptions,
   weekColumnForMonthStart,
 } from '../shared/domain/gallery/travelHeatmapData';
 
@@ -46,6 +47,8 @@ export interface TravelHeatmapCalendarProps {
   buildings: ProcessedImage[];
   /** 展示的自然年，默认当前年 */
   year?: number;
+  /** 用户注册所在年份；年份选择不会早于此年份 */
+  registrationYear?: number;
 }
 
 type LayoutMetrics = {
@@ -67,14 +70,29 @@ type LayoutMetrics = {
 
 export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
   buildings,
-  year = new Date().getFullYear(),
+  year,
+  registrationYear,
 }) => {
   const { t } = useLocalization();
   const rootRef = useRef<HTMLDivElement>(null);
   const [m, setM] = useState<LayoutMetrics | null>(null);
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(year ?? currentYear);
+  const yearOptions = useMemo(
+    () => getHeatmapYearOptions(registrationYear, currentYear),
+    [currentYear, registrationYear],
+  );
+  const displayYear = year ?? selectedYear;
 
-  const counts = useMemo(() => aggregateUploadsByDay(buildings, year), [buildings, year]);
-  const { cells, numWeeks } = useMemo(() => buildYearHeatmapCells(year, counts), [year, counts]);
+  useEffect(() => {
+    setSelectedYear(year ?? currentYear);
+  }, [currentYear, registrationYear, year]);
+
+  const counts = useMemo(() => aggregateUploadsByDay(buildings, displayYear), [buildings, displayYear]);
+  const { cells, numWeeks } = useMemo(
+    () => buildYearHeatmapCells(displayYear, counts),
+    [displayYear, counts],
+  );
 
   useLayoutEffect(() => {
     const el = rootRef.current;
@@ -145,9 +163,9 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
   const monthLabelPositions = useMemo(() => {
     return MONTH_KEYS.map((key, mi) => ({
       label: t(key),
-      col: weekColumnForMonthStart(year, mi, numWeeks),
+      col: weekColumnForMonthStart(displayYear, mi, numWeeks),
     }));
-  }, [numWeeks, t, year]);
+  }, [displayYear, numWeeks, t]);
 
   if (!m) {
     return (
@@ -179,7 +197,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
         containerType: 'size',
       }}
       role="region"
-      aria-label={`${t('galleryTrackActivities')} ${year}`}
+      aria-label={`${t('galleryTrackActivities')} ${displayYear}`}
     >
       <div
         style={{
@@ -197,7 +215,35 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
           className="flex w-full flex-row items-center gap-2"
           style={{ marginBottom: 16, minHeight: 28 }}
         >
-          <div className="min-w-0 flex-1" aria-hidden />
+          <div className="flex min-w-0 flex-1 items-center justify-start">
+            <label
+              className="flex items-center gap-1.5 text-[#756F6C]"
+              style={{
+                fontFamily: COMFORTAA_FONT,
+                fontWeight: 400,
+                fontSize: TRACK_FONT_PX,
+              }}
+            >
+              <span>{t('galleryYear')}</span>
+              <select
+                value={displayYear}
+                onChange={(event) => setSelectedYear(Number(event.target.value))}
+                aria-label={t('galleryYear')}
+                className="cursor-pointer rounded-sm border border-[#c4bfb5] bg-[#F9F1E2] px-1.5 py-0.5 text-[#756F6C] outline-none transition-colors hover:border-[#8f9b6e] focus:border-[#5F6D3B]"
+                style={{
+                  fontFamily: COMFORTAA_FONT,
+                  fontWeight: 400,
+                  fontSize: TRACK_FONT_PX,
+                }}
+              >
+                {yearOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <h2
             className="m-0 min-w-0 max-w-[min(100%,20rem)] shrink text-center text-base md:text-lg text-[#756F6C]"
             style={{

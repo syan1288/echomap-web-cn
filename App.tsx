@@ -2522,6 +2522,11 @@ const App: React.FC = () => {
         >
             <GallerySection
               buildings={lockedGalleryBuildings}
+              registrationYear={
+                user?.created_at
+                  ? new Date(user.created_at).getFullYear()
+                  : undefined
+              }
               onSwipeToHome={scrollToHome}
               onOpenBuilding={(id) => {
                 setGalleryDetailId(id);

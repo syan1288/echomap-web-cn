@@ -158,6 +158,7 @@ export interface GallerySectionProps {
   buildings: ProcessedImage[];
   onOpenBuilding: (id: number) => void;
   onSwipeToHome?: () => void;
+  registrationYear?: number;
 }
 
 const DIM_LABEL_KEYS: { id: GalleryDim; key: string }[] = [
@@ -167,7 +168,12 @@ const DIM_LABEL_KEYS: { id: GalleryDim; key: string }[] = [
   { id: 'continent', key: 'galleryFilterContinent' },
 ];
 
-export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpenBuilding, onSwipeToHome }) => {
+export const GallerySection: React.FC<GallerySectionProps> = ({
+  buildings,
+  onOpenBuilding,
+  onSwipeToHome,
+  registrationYear,
+}) => {
   const { t } = useLocalization();
   const [query, setQuery] = useState('');
   const [dim, setDim] = useState<GalleryDim>('all');
@@ -475,7 +481,7 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ buildings, onOpe
         </div>
       </div>
 
-      <TravelHeatmapCalendar buildings={buildings} />
+      <TravelHeatmapCalendar buildings={buildings} registrationYear={registrationYear} />
     </section>
   );
 };

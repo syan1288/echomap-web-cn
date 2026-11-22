@@ -18,6 +18,21 @@ export function toIsoKey(y: number, m: number, d: number): string {
   return `${y}-${pad2(m)}-${pad2(d)}`;
 }
 
+/** 可供热力图选择的自然年：当前年优先，最早不早于用户注册年份。 */
+export function getHeatmapYearOptions(
+  registrationYear?: number,
+  currentYear = new Date().getFullYear(),
+): number[] {
+  const end = Number.isFinite(currentYear) ? Math.floor(currentYear) : new Date().getFullYear();
+  const normalizedRegistrationYear =
+    typeof registrationYear === 'number' && Number.isFinite(registrationYear)
+      ? Math.floor(registrationYear)
+      : end;
+  const start = Math.min(normalizedRegistrationYear, end);
+
+  return Array.from({ length: end - start + 1 }, (_, index) => end - index);
+}
+
 /** 解析 log.date 常见格式 YYYY-MM-DD */
 export function parseLogDate(s: string | undefined | null): { y: number; m: number; d: number } | null {
   if (!s || typeof s !== 'string') return null;

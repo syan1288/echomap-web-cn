@@ -58,6 +58,7 @@ import { parseReverseGeocodePlace, parseSearchSuggestions, type SearchSuggestion
 import { DEFAULT_BUILDING_STYLE, type BuildingStyleDefinition, type BuildingStyleId } from '../../shared/domain/building-style/buildingStyle';
 import { useBuildingStyles } from '../../hooks/useBuildingStyles';
 import { clampGalleryPage, paginateGalleryItems } from '../../shared/domain/galleryPagination';
+import { getHeatmapYearOptions } from '../../shared/domain/gallery/travelHeatmapData';
 import type { AudioEntry, LogData, PhotoData, ProcessedImage } from '../../web/app/webMemoryTypes';
 import './MobileShell.css';
 
@@ -251,6 +252,7 @@ const MOBILE_COPY = {
     prev: '< prev',
     next: 'Next>',
     trackActivities: 'Track your travel activities',
+    year: 'Year',
     less: 'Less',
     more: 'More',
     inCity: 'In',
@@ -345,6 +347,7 @@ const MOBILE_COPY = {
     prev: '< 上一页',
     next: '下一页>',
     trackActivities: '记录你的旅行活动',
+    year: '年份',
     less: '少',
     more: '多',
     inCity: '在',
@@ -2637,14 +2640,29 @@ function dateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
+function HeatmapMini({
+  memories,
+  registrationYear,
+}: {
+  memories: MobileMemory[];
+  registrationYear?: number;
+}) {
   const copy = useMobileCopy();
   const columns = 53;
   const rows = 7;
   const levels = ['transparent', '#d9e8c1', '#b9ce9a', '#8ea56b', '#64743e'];
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const yearOptions = useMemo(
+    () => getHeatmapYearOptions(registrationYear, currentYear),
+    [currentYear, registrationYear],
+  );
+
+  useEffect(() => {
+    setSelectedYear(currentYear);
+  }, [currentYear, registrationYear]);
 
   const { cells, monthLabels } = useMemo(() => {
-    const activityDates: Date[] = [];
     const dailyIntensity = new Map<string, number>();
     const activeMemories = memories.filter((memory) => !memory.deleted);
 
@@ -2652,7 +2670,6 @@ function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
       (memory.photos ?? []).forEach((rawPhoto) => {
         const photo = rawPhoto as HeatmapPhotoData;
         const deletedDate = getDeletedPhotoDate(photo);
-        if (deletedDate) activityDates.push(deletedDate);
         if (isDeletedPhoto(photo)) {
           if (deletedDate) {
             const key = dateKey(deletedDate);
@@ -2663,21 +2680,18 @@ function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
 
         const uploadedDate = getPhotoUploadDate(photo, memory);
         if (!uploadedDate) return;
-        activityDates.push(uploadedDate);
         const key = dateKey(uploadedDate);
         dailyIntensity.set(key, (dailyIntensity.get(key) ?? 0) + 1);
       });
     });
-    activityDates.sort((a, b) => b.getTime() - a.getTime());
-    const year = activityDates[0]?.getFullYear() ?? new Date().getFullYear();
     const positiveMax = Math.max(
       0,
       ...Array.from(dailyIntensity.entries())
-        .filter(([key]) => key.startsWith(`${year}-`))
+        .filter(([key]) => key.startsWith(`${selectedYear}-`))
         .map(([, count]) => count),
     );
 
-    const yearStart = new Date(year, 0, 1);
+    const yearStart = new Date(selectedYear, 0, 1);
     const gridStart = new Date(yearStart);
     gridStart.setDate(yearStart.getDate() - yearStart.getDay());
 
@@ -2686,7 +2700,7 @@ function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
       const row = index % rows;
       const current = new Date(gridStart);
       current.setDate(gridStart.getDate() + col * rows + row);
-      const inYear = current.getFullYear() === year;
+      const inYear = current.getFullYear() === selectedYear;
       const count = inYear ? dailyIntensity.get(dateKey(current)) ?? 0 : 0;
       const visibleCount = Math.max(0, count);
       const level = positiveMax > 0 ? Math.ceil((visibleCount / positiveMax) * (levels.length - 1)) : 0;
@@ -2701,7 +2715,7 @@ function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
     });
 
     const months = copy.months.map((label, month) => {
-      const first = new Date(year, month, 1);
+      const first = new Date(selectedYear, month, 1);
       const daysFromStart = Math.floor((first.getTime() - gridStart.getTime()) / 86400000);
       const weekColumn = Math.floor(daysFromStart / rows);
       return {
@@ -2711,29 +2725,50 @@ function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
     });
 
     return { cells: heatmapCells, monthLabels: months };
-  }, [copy.months, memories, levels]);
+  }, [copy.months, memories, selectedYear]);
 
   return (
     <div className="echo-heatmap-mini mx-auto w-[90%] pb-1">
-      <div className="echo-heatmap-legend flex items-center justify-end gap-1 text-[12px] text-[#8f8068]" style={{ fontFamily: COMFORTAA_FONT }}>
-        <span>{copy.less}</span>
-        <span className="flex items-center gap-0" aria-hidden>
-          {levels.map((color, index) => (
-            <span
-              key={`${color}-${index}`}
-              className="h-[8px] w-[8px]"
-              style={{
-                background: color,
-                borderLeft: index === 0 ? '1px solid #d7c9ad' : 'none',
-                borderTop: '1px solid #d7c9ad',
-                borderBottom: '1px solid #d7c9ad',
-                borderRight: '1px solid #d7c9ad',
-              }}
-            />
-          ))}
-        </span>
-        <span>{copy.more}</span>
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-[12px] text-[#8f8068]" style={{ fontFamily: COMFORTAA_FONT }}>
+        <label className="flex shrink-0 items-center gap-1.5">
+          <span>{copy.year}</span>
+          <select
+            value={selectedYear}
+            onChange={(event) => setSelectedYear(Number(event.target.value))}
+            aria-label={copy.year}
+            className="cursor-pointer rounded-sm border border-[#d7c9ad] bg-[#F9F1E2] px-1.5 py-0.5 text-[#6c655a] outline-none"
+            style={{ fontFamily: COMFORTAA_FONT }}
+          >
+            {yearOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="echo-heatmap-legend flex min-w-0 items-center justify-end gap-1" aria-label={`${copy.less} to ${copy.more}`}>
+          <span>{copy.less}</span>
+          <span className="flex items-center gap-0" aria-hidden>
+            {levels.map((color, index) => (
+              <span
+                key={`${color}-${index}`}
+                className="h-[8px] w-[8px]"
+                style={{
+                  background: color,
+                  borderLeft: index === 0 ? '1px solid #d7c9ad' : 'none',
+                  borderTop: '1px solid #d7c9ad',
+                  borderBottom: '1px solid #d7c9ad',
+                  borderRight: '1px solid #d7c9ad',
+                }}
+              />
+            ))}
+          </span>
+          <span>{copy.more}</span>
+        </div>
       </div>
+      <p className="echo-heatmap-title m-0 mb-1.5 text-center text-[15px]" style={{ color: '#6c655a', fontFamily: COMFORTAA_FONT }}>
+        {copy.trackActivities}
+      </p>
       <div className="echo-heatmap-months relative px-1 text-[#8f8068]" style={{ fontFamily: COMFORTAA_FONT }}>
         {monthLabels.map((month) => (
           <span key={month.label} className="absolute top-0 -translate-x-1/2" style={{ left: month.left }}>
@@ -2769,7 +2804,13 @@ function HeatmapMini({ memories }: { memories: MobileMemory[] }) {
   );
 }
 
-function GalleryPage({ memories }: { memories: MobileMemory[] }) {
+function GalleryPage({
+  memories,
+  registrationYear,
+}: {
+  memories: MobileMemory[];
+  registrationYear?: number;
+}) {
   const copy = useMobileCopy();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [galleryOpenM03, setGalleryOpenM03] = useState(false);
@@ -2850,8 +2891,7 @@ function GalleryPage({ memories }: { memories: MobileMemory[] }) {
       </div>
       <div className="echo-gallery-heatmap-block">
         <div className="mobile-heatmap-divider" aria-hidden />
-        <p className="echo-heatmap-title text-center text-[15px]" style={{ color: '#6c655a', fontFamily: COMFORTAA_FONT }}>{copy.trackActivities}</p>
-        <HeatmapMini memories={memories} />
+        <HeatmapMini memories={memories} registrationYear={registrationYear} />
       </div>
       <GalleryDetailModals
         key={selectedId === null ? 'mobile-gallery-detail-closed' : `mobile-gallery-detail-${selectedId}`}
@@ -4010,7 +4050,14 @@ function AuthenticatedMobileShell() {
           className={mobileTabPanelClass(activeTab === 'gallery')}
           aria-hidden={activeTab === 'gallery' ? undefined : true}
         >
-          <GalleryPage memories={memories} />
+          <GalleryPage
+            memories={memories}
+            registrationYear={
+              user?.created_at
+                ? new Date(user.created_at).getFullYear()
+                : undefined
+            }
+          />
         </div>
       )}
       {mountedTabs.has('setting') && (

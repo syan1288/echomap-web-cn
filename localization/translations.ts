@@ -56,6 +56,7 @@ export const translations: { [key: string]: { [lang in Language]: string } } = {
   galleryCountry: { en: 'COUNTRY', zh: '国家' },
   galleryContinent: { en: 'CONTINENT', zh: '洲' },
   galleryTrackActivities: { en: 'Track your travel activities', zh: '记录你的旅行活动' },
+  galleryYear: { en: 'Year', zh: '年份' },
   galleryLess: { en: 'Less', zh: '少' },
   galleryMore: { en: 'More', zh: '多' },
   galleryMonthJan: { en: 'Jan', zh: '1月' },
