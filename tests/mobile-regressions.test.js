@@ -19,6 +19,22 @@ test('mobile settings keeps logout reachable and closes after sign out', () => {
   assert.match(mobileShell, /const handleMobileLogout = useCallback/);
 });
 
+test('mobile account supports resilient avatar uploads', () => {
+  assert.match(mobileShell, /htmlFor="mobile-avatar-upload"/);
+  assert.match(mobileShell, /id="mobile-avatar-upload"/);
+  assert.match(mobileShell, /canvas\.toDataURL\('image\/jpeg', 0\.82\)/);
+  assert.match(mobileShell, /Keep the in-memory avatar visible/);
+});
+
+test('mobile map keeps language and help with the four circular controls', () => {
+  assert.match(mobileShell, /const \{ language, toggleLanguage \} = useLocalization\(\);/);
+  assert.match(mobileShell, /copy\.switchToChinese/);
+  assert.match(mobileShell, /copy\.switchToEnglish/);
+  assert.match(mobileShell, /copy\.showHelp/);
+  assert.match(mobileShell, /setShowHelpModal\(true\)/);
+  assert.match(mobileShell, /absolute right-3 z-10 flex gap-\[10px\]/);
+});
+
 test('short mobile auth stages keep the registration sheet and actions inside the viewport', () => {
   assert.match(mobileShell, /mobile-auth-stage/);
   assert.match(authPanel, /auth-mobile-action/);

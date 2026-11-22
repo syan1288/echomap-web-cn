@@ -235,6 +235,9 @@ const MOBILE_COPY = {
     mapStyle: 'Map style',
     camera: 'Camera',
     download: 'Download',
+    showHelp: 'Show help',
+    switchToChinese: 'Switch to Chinese',
+    switchToEnglish: 'Switch to English',
     selectBuildingFirst: 'Select a building first',
     downloadStarted: 'Download started',
     locationFound: 'Location found! Placing your memory in',
@@ -326,6 +329,9 @@ const MOBILE_COPY = {
     mapStyle: '地图样式',
     camera: '相机',
     download: '下载',
+    showHelp: '显示帮助',
+    switchToChinese: '切换到中文',
+    switchToEnglish: '切换到英文',
     selectBuildingFirst: '请先选择建筑',
     downloadStarted: '已开始下载',
     locationFound: '已定位，将你的回忆放在',
@@ -386,7 +392,7 @@ const MOBILE_COPY = {
 } as const;
 
 function useMobileCopy() {
-  const { language } = useLocalization();
+  const { language, toggleLanguage } = useLocalization();
   return MOBILE_COPY[language];
 }
 
@@ -470,17 +476,6 @@ const IconCameraOnly: React.FC<{ size?: number }> = ({ size = 18 }) => (
     <path d="M8.4 7.3 9.8 5.6h4.4l1.4 1.7H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.3a2 2 0 0 1 2-2h3.4Z" />
     <circle cx="12" cy="13.5" r="3.1" />
     <circle cx="18" cy="10.2" r="0.45" fill="currentColor" stroke="none" />
-  </svg>
-);
-
-const IconLanguage: React.FC<{ size?: number }> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M4 5h8" />
-    <path d="M8 3v2" />
-    <path d="M6 5c.5 2.8 2.3 5 5 6.6" />
-    <path d="M11 5c-.8 3.2-2.9 5.8-6.2 7.7" />
-    <path d="M14 20l3.6-9 3.6 9" />
-    <path d="M15.3 16.8h4.6" />
   </svg>
 );
 
@@ -1417,6 +1412,7 @@ function MapPage({
   const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([]);
   const [basemapTheme, setBasemapTheme] = useState<BasemapThemeId>('mist');
   const [showBasemapMenu, setShowBasemapMenu] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(
     memories[0] ? mobileMemorySlotKey(memories[0], 0) : null,
   );
@@ -2215,18 +2211,27 @@ function MapPage({
           </div>
         )}
       </form>
-      <div className="absolute right-3 top-12 z-10 grid gap-[10px]">
+      <div
+        className="absolute right-3 z-10 flex gap-[10px]"
+        style={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
+      >
         {[
           [copy.mapStyle, <EchoMapStyleIcon strokeWidth={1.4} />, () => setShowBasemapMenu((open) => !open)],
           [copy.currentLocation, <EchoLocationPinIcon strokeWidth={1.4} />, goToCurrentLocation],
+          [
+            language === 'en' ? copy.switchToChinese : copy.switchToEnglish,
+            <span className="text-[13px] font-semibold leading-none">{language === 'zh' ? '中' : 'EN'}</span>,
+            toggleLanguage,
+          ],
+          [copy.showHelp, <span className="text-[16px] font-medium leading-none">?</span>, () => setShowHelpModal(true)],
         ].map(([label, icon, action]) => (
           <button
             key={label as string}
             type="button"
             onClick={action as () => void}
             className="echo-glass-orb echo-map-orb flex h-8 w-8 items-center justify-center rounded-full text-black"
-          aria-label={label as string}
-        >
+            aria-label={label as string}
+          >
             <span className="grid h-[19px] w-[19px] place-items-center">{icon}</span>
           </button>
         ))}
@@ -2474,6 +2479,11 @@ function MapPage({
           flashNotice(copy.audioSaved);
         }}
       />
+      {showHelpModal && (
+        <div className="absolute inset-0 z-50">
+          <HelpModal onClose={() => setShowHelpModal(false)} />
+        </div>
+      )}
     </section>
   );
 }
@@ -2886,7 +2896,7 @@ function SettingPage({
   imageProviderAvailability: ImageProviderAvailability | null;
 }) {
   const { user, session, signOut } = useAuth();
-  const { language, toggleLanguage } = useLocalization();
+  const { language } = useLocalization();
   const { styles, update, create, remove } = useBuildingStyles();
   const accountEmail = user?.email?.trim() ?? '';
   const accountPhone = user?.phone?.trim()
@@ -2968,7 +2978,6 @@ function SettingPage({
     () => filterMobileMemories(memories.filter((memory) => !memory.deleted), filterQuery),
     [memories, filterQuery],
   );
-  const languageLabel = language === 'en' ? 'English' : '中文';
   const maskedPhone = maskPhoneNumber(profilePhone);
   const permissionRows = useMemo(
     () => [
@@ -3040,15 +3049,34 @@ function SettingPage({
   }, [draftEmail]);
 
   const updateAvatar = useCallback((file: File | null) => {
-    if (!file) return;
+    if (!file || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const value = typeof reader.result === 'string' ? reader.result : null;
-      if (!value) return;
-      setAvatarSrc(value);
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(`${profileStorageKey}:avatar`, value);
-      }
+      const source = typeof reader.result === 'string' ? reader.result : null;
+      if (!source) return;
+      const image = new Image();
+      image.onload = () => {
+        const maxSize = 256;
+        const scale = Math.min(1, maxSize / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+        const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+        const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+        const value = canvas.toDataURL('image/jpeg', 0.82);
+        setAvatarSrc(value);
+        try {
+          window.localStorage.setItem(`${profileStorageKey}:avatar`, value);
+        } catch {
+          // Keep the in-memory avatar visible if a mobile browser rejects storage.
+        }
+      };
+      image.src = source;
     };
     reader.readAsDataURL(file);
   }, [profileStorageKey]);
@@ -3198,19 +3226,19 @@ function SettingPage({
                   <IconAccount size={44} />
                 )}
               </div>
-              <button
-                type="button"
+              <label
+                htmlFor="mobile-avatar-upload"
                 className="absolute bottom-[-2px] right-[-4px] flex h-9 w-9 items-center justify-center rounded-full border-0 bg-white p-0 text-[#333] shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
                 aria-label={copy.changeAvatar}
-                onClick={() => avatarInputRef.current?.click()}
               >
                 <IconCameraOnly size={21} />
-              </button>
+              </label>
               <input
+                id="mobile-avatar-upload"
                 ref={avatarInputRef}
                 type="file"
                 accept="image/*"
-                className="hidden"
+                className="sr-only"
                 onChange={(event) => {
                   updateAvatar(event.target.files?.[0] ?? null);
                   event.currentTarget.value = '';
@@ -3381,17 +3409,10 @@ function SettingPage({
               </button>
 
               <div className="overflow-visible rounded-[16px] bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-                <button type="button" className="echo-setting-row rounded-b-none shadow-none" onClick={toggleLanguage} aria-label={copy.language}>
-                  <span className="echo-setting-icon echo-setting-icon-pure"><IconLanguage size={22} /></span>
-                  <span className="min-w-0 flex-1 text-left text-[14px] font-bold tracking-[0.02em] text-[#666]">{copy.language}</span>
-                  <span className="text-[14px] font-bold tracking-[0.02em] text-[#777]">{languageLabel}</span>
-                  <span className="text-[#777]"><IconChevronDown size={13} /></span>
-                </button>
-                <div className="mx-3 h-px bg-[#eeeeec]" aria-hidden />
                 <div className="relative">
                   <button
                     type="button"
-                    className="echo-setting-row rounded-t-none shadow-none"
+                    className="echo-setting-row rounded-[16px] shadow-none"
                     onClick={() => setModelMenuOpen((open) => !open)}
                     aria-label={copy.chooseModel}
                     aria-expanded={modelMenuOpen}
