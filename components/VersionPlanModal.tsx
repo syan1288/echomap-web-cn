@@ -50,6 +50,22 @@ const IconChevronLeft: React.FC = () => (
   </svg>
 );
 
+const IconChevronRight: React.FC = () => (
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={ICON_STROKE_WIDTH}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden
+  >
+    <path d="m9 18 6-6-6-6" />
+  </svg>
+);
+
 export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, title }) => {
   const { t } = useLocalization();
   const { session, user } = useAuth();
@@ -233,7 +249,9 @@ export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, tit
             >
               <span className="min-w-0 flex-1 font-bold text-[#444]">{t('balanceCurrentPlan')}</span>
               <span className="text-[#666]">{currentPlanName}</span>
-              <span className="text-[#888]" aria-hidden>›</span>
+              <span className="flex shrink-0 text-[#888]" aria-hidden>
+                <IconChevronRight />
+              </span>
             </button>
             <button
               type="button"
@@ -241,7 +259,9 @@ export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, tit
               onClick={() => setPage('upgrade')}
             >
               <span className="min-w-0 flex-1 font-bold text-[#444]">{t('balanceUpgradePlan')}</span>
-              <span className="text-[#888]" aria-hidden>›</span>
+              <span className="flex shrink-0 text-[#888]" aria-hidden>
+                <IconChevronRight />
+              </span>
             </button>
           </div>
         )}

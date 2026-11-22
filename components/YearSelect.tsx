@@ -75,7 +75,7 @@ export const YearSelect: React.FC<YearSelectProps> = ({
 
       {open && (
         <div
-          className="absolute left-0 top-[calc(100%+3px)] z-50 w-full overflow-y-auto border bg-white p-0 shadow-[0_6px_14px_rgba(17,17,17,0.1)]"
+          className="absolute left-0 top-[calc(100%+3px)] z-50 w-full overflow-y-auto border bg-white p-1 shadow-[0_6px_14px_rgba(17,17,17,0.1)]"
           style={{
             borderColor: PANEL_BORDER,
             maxHeight: 5 * 28,
