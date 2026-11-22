@@ -28,8 +28,8 @@
 | --- | --- |
 | 工作区 | `/Users/athena.xu/.codex/worktrees/legal-policy-pages/echomap-web-cn` |
 | 当前工作分支 | `main` |
-| 当前 HEAD | `f62b155 fix: refine year selector styling` |
-| `origin/main` | `f62b155` |
+| 当前 HEAD | `2eb89ec fix: compact year selector menu` |
+| `origin/main` | `2eb89ec` |
 | 工作区状态 | 干净 |
 | GitHub 远端 | `git@github.com:syan1288/echomap-web-cn.git` |
 | GitHub HTTPS | `https://github.com/syan1288/echomap-web-cn` |
@@ -51,9 +51,9 @@ git rev-parse HEAD origin/main
 | Vercel 项目 | `echo-map` |
 | Vercel Project ID | `prj_npSfrF4Aw8Cv4axcgylC24j1a4pD` |
 | Vercel Team ID | `team_J2DAHL8pq37Ep6qVpsda5NzL` |
-| 最新已知 Production Deployment | `dpl_97rhBVifm2wFGZ91kkSKuUAXd6Vk` |
+| 最新已知 Production Deployment | `dpl_Dj3CPSQka6scL2zLQex8DhpxSsJB` |
 | Deployment 状态 | `READY` |
-| Deployment URL | `https://echo-4asejmzqp-syan1288s-projects.vercel.app` |
+| Deployment URL | `https://echo-jhm0t3zui-syan1288s-projects.vercel.app` |
 | Vercel 默认域名 | `https://echo-map-phi.vercel.app` |
 | Vercel 项目默认别名 | `https://echo-map-syan1288s-projects.vercel.app` |
 | 部署命令 | `npx vercel --prod --yes` |
@@ -1611,4 +1611,4 @@ git pull --ff-only origin main
 6. 生产额度和支付必须使用 Supabase 数据库，不要使用 Serverless 本地 JSON 文件。
 7. Secret 不能靠 Git 找回；大多数情况是轮换后更新 Vercel、Supabase 或供应商控制台。
 8. 修改额度时要同时检查环境变量、Supabase RPC、服务端 fallback、页面文案和测试。
-9. 当前快照是 `f62b155`，生产别名是 `https://echomap.syan12.cn`。
+9. 当前快照是 `2eb89ec`，生产别名是 `https://echomap.syan12.cn`。
