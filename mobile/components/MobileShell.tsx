@@ -27,6 +27,7 @@ import { PhotoPreviewModal } from '../../components/PhotoPreviewModal';
 import { GalleryDetailModals } from '../../components/GalleryDetailModals';
 import { HelpModal } from '../../components/HelpModal';
 import { VersionPlanModal } from '../../components/VersionPlanModal';
+import { YearSelect } from '../../components/YearSelect';
 import { AddBuildingModal } from '../../components/AddBuildingModal';
 import { BuildingStyleEditorModal } from '../../components/BuildingStyleEditorModal';
 import { MoonFaceAvatar } from '../../components/MoonFaceAvatar';
@@ -2730,22 +2731,13 @@ function HeatmapMini({
   return (
     <div className="echo-heatmap-mini mx-auto w-[90%] pb-1">
       <div className="mb-1.5 flex items-center justify-between gap-3 text-[12px] text-[#8f8068]" style={{ fontFamily: COMFORTAA_FONT }}>
-        <label className="flex shrink-0 items-center gap-1.5">
-          <span>{copy.year}</span>
-          <select
-            value={selectedYear}
-            onChange={(event) => setSelectedYear(Number(event.target.value))}
-            aria-label={copy.year}
-            className="cursor-pointer border-0 bg-transparent px-0.5 py-0.5 text-[#6c655a] outline-none"
-            style={{ fontFamily: COMFORTAA_FONT }}
-          >
-            {yearOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
+        <YearSelect
+          label={copy.year}
+          value={selectedYear}
+          options={yearOptions}
+          onChange={setSelectedYear}
+          className="w-[128px]"
+        />
         <div className="echo-heatmap-legend flex min-w-0 items-center justify-end gap-1" aria-label={`${copy.less} to ${copy.more}`}>
           <span>{copy.less}</span>
           <span className="flex items-center gap-0" aria-hidden>

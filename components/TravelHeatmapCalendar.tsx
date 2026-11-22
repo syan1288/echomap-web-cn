@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ProcessedImage } from '../web/app/webMemoryTypes';
 import { useLocalization } from '../context/LocalizationContext';
+import { YearSelect } from './YearSelect';
 import {
   aggregateUploadsByDay,
   buildYearHeatmapCells,
@@ -216,33 +217,13 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
           style={{ marginBottom: 16, minHeight: 28 }}
         >
           <div className="flex min-w-0 flex-1 items-center justify-start">
-            <label
-              className="flex items-center gap-1.5 text-[#756F6C]"
-              style={{
-                fontFamily: COMFORTAA_FONT,
-                fontWeight: 400,
-                fontSize: TRACK_FONT_PX,
-              }}
-            >
-              <span>{t('galleryYear')}</span>
-              <select
-                value={displayYear}
-                onChange={(event) => setSelectedYear(Number(event.target.value))}
-                aria-label={t('galleryYear')}
-                className="cursor-pointer border-0 bg-transparent px-0.5 py-0.5 text-[#756F6C] outline-none transition-colors focus:text-[#5F6D3B]"
-                style={{
-                  fontFamily: COMFORTAA_FONT,
-                  fontWeight: 400,
-                  fontSize: TRACK_FONT_PX,
-                }}
-              >
-                {yearOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <YearSelect
+              label={t('galleryYear')}
+              value={displayYear}
+              options={yearOptions}
+              onChange={setSelectedYear}
+              className="w-[132px]"
+            />
           </div>
           <h2
             className="m-0 min-w-0 max-w-[min(100%,20rem)] shrink text-center text-base md:text-lg text-[#756F6C]"
