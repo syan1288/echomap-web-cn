@@ -17,7 +17,7 @@
 
 .mobile-shell .auth-mobile-sheet button,
 .mobile-shell .auth-mobile-sheet input {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .mobile-screen {
@@ -109,7 +109,7 @@
 }
 
 .auth-mobile-sign-in-form .mobile-auth-title {
-  font-size: clamp(1.75rem, 7vw, 2.2rem) !important;
+  font-size: clamp(1.55rem, 6vw, 1.9rem) !important;
   line-height: 1;
 }
 
@@ -137,7 +137,7 @@
 
 .auth-mobile-sign-in-form > div:last-child button {
   min-height: clamp(2.75rem, 5vh, 3.5rem) !important;
-  font-size: clamp(1rem, 4vw, 1.2rem) !important;
+  font-size: clamp(0.95rem, 3.4vw, 1.1rem) !important;
 }
 
 .auth-mobile-sign-up-sheet .mobile-auth-content {
@@ -145,7 +145,7 @@
 }
 
 .auth-mobile-sign-up-sheet .mobile-auth-content > h2 {
-  font-size: clamp(1.75rem, 7vw, 2.2rem) !important;
+  font-size: clamp(1.55rem, 6vw, 1.9rem) !important;
   line-height: 1;
 }
 
@@ -176,7 +176,7 @@
 
 .auth-mobile-sign-up-sheet .mobile-auth-action {
   min-height: clamp(2.75rem, 5vh, 3.5rem) !important;
-  font-size: clamp(1rem, 4vw, 1.2rem) !important;
+  font-size: clamp(0.95rem, 3.4vw, 1.1rem) !important;
 }
 
 .mobile-auth-stage-brand {
@@ -211,7 +211,7 @@
   }
 
   .mobile-shell .auth-mobile-sheet .mobile-auth-title {
-    font-size: clamp(1.75rem, 8vw, 2.1rem) !important;
+    font-size: clamp(1.55rem, 7vw, 1.9rem) !important;
     line-height: 1.05;
   }
 
@@ -219,7 +219,7 @@
     min-height: clamp(2.75rem, 5.4vh, 3.5rem) !important;
     padding-bottom: 0.25rem;
     padding-top: 0.25rem;
-    font-size: clamp(1rem, 4.4vw, 1.15rem) !important;
+    font-size: clamp(0.95rem, 3.6vw, 1.05rem) !important;
   }
 
   .mobile-shell .auth-mobile-sheet .auth-feedback-footer {

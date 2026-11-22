@@ -25,11 +25,17 @@ test('short mobile auth stages keep the registration sheet and actions inside th
   assert.match(authPanel, /height: '39dvh'/);
   assert.match(authPanel, /flex: '0 0 39dvh'/);
   assert.match(authPanel, /auth-mobile-sign-up-sheet/);
-  assert.match(mobileShell, /mobile-auth-stage-form flex flex-1 flex-col justify-end/);
+  assert.match(mobileShell, /absolute inset-x-0 bottom-0 z-20/);
   assert.match(mobileCss, /\.auth-mobile-sign-up-sheet \.mobile-auth-action\s*\{[\s\S]*min-height:\s*clamp/);
   assert.match(mobileCss, /@media\s*\(max-width:\s*480px\)\s*and\s*\(max-height:\s*760px\)/);
   assert.match(mobileCss, /\.mobile-shell \.auth-mobile-sheet \.auth-mobile-action/);
   assert.match(mobileCss, /\.mobile-home-screen \.auth-mobile-sheet\s*\{[\s\S]*max-width:\s*none/);
+});
+
+test('mobile auth overlay preserves the full brand layer behind the sheet', () => {
+  assert.match(mobileShell, /h-\[100dvh\].*overflow-hidden/);
+  assert.match(mobileShell, /<BrandBlock showSubtitle \/>/);
+  assert.match(mobileShell, /authStage === 'welcome' \? 'max-w-\[360px\]/);
 });
 
 test('mobile account switchers stay centered on one line inside the sheet', () => {

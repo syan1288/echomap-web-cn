@@ -270,7 +270,7 @@ function ActionButton({
         ...styles,
         fontFamily: AUTH_FONT,
         fontWeight: 700,
-        ...(mobile && !embedded ? { fontSize: 'clamp(16px, 3.4vw, 20px)' } : {}),
+        ...(mobile && !embedded ? { fontSize: 'clamp(15px, 3vw, 18px)' } : {}),
         boxShadow: variant === 'primary' ? '0 1px 0 rgba(255,255,255,0.25)' : 'none',
       }}
     >
@@ -369,7 +369,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
   const recentEmail = useMemo(() => readRecentEmail(), []);
   const recentAccountName = useMemo(() => recentEmail.split('@')[0] || recentEmail, [recentEmail]);
   const recentInitial = recentAccountName.trim().charAt(0).toUpperCase() || 'S';
-  const mobileTitleClass = embedded ? 'text-left text-[1.4rem]' : 'mobile-auth-title text-left text-[2.2rem]';
+  const mobileTitleClass = embedded ? 'text-left text-[1.4rem]' : 'mobile-auth-title text-left text-[1.85rem]';
   useEffect(() => {
     onStageChange?.(stage);
   }, [onStageChange, stage]);
@@ -978,7 +978,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({ mobileLayout = false, embe
     <div
       className={`flex w-full flex-col items-center ${
         isMobileSheet
-          ? `auth-mobile-sheet ${mobileSheetStageClass} h-[39dvh] flex-none -mx-[1.75rem] w-[calc(100%+3.5rem)] rounded-t-[4.25rem] bg-[#e8f1ff] px-7 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[clamp(1rem,2.4vh,2rem)]`
+          ? `auth-mobile-sheet ${mobileSheetStageClass} h-[39dvh] flex-none -mx-[1.75rem] w-[calc(100%+3.5rem)] rounded-t-[2.25rem] bg-[#e8f1ff] px-7 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[clamp(1rem,2.4vh,2rem)]`
           : isEmbeddedMobile
             ? 'auth-embedded-panel min-h-0 flex-1 justify-center'
             : 'gap-3'
