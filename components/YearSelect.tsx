@@ -44,12 +44,11 @@ export const YearSelect: React.FC<YearSelectProps> = ({
     <div ref={rootRef} className={`relative shrink-0 ${className}`}>
       <button
         type="button"
-        className="flex min-h-8 w-full items-center justify-between gap-3 rounded-[8px] border bg-white px-3 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1687ff]/30"
+        className="flex min-h-7 w-full items-center justify-between gap-2 border-0 bg-transparent px-0 py-0 text-left transition-colors hover:text-[#5f5954] focus-visible:outline-none focus-visible:ring-0"
         style={{
-          borderColor: open ? BLUE : BLUE,
           fontFamily: COMFORTAA_FONT,
-          fontSize: 12,
-          color: '#111',
+          fontSize: 15,
+          color: '#756f6c',
         }}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -60,12 +59,12 @@ export const YearSelect: React.FC<YearSelectProps> = ({
         <span className="flex shrink-0 items-center gap-2">
           <span>{value}</span>
           <svg
-            width="18"
-            height="18"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden
