@@ -2736,7 +2736,7 @@ function HeatmapMini({
           value={selectedYear}
           options={yearOptions}
           onChange={setSelectedYear}
-          className="w-[128px]"
+          className="w-[108px]"
         />
         <div className="echo-heatmap-legend flex min-w-0 items-center justify-end gap-1" aria-label={`${copy.less} to ${copy.more}`}>
           <span>{copy.less}</span>

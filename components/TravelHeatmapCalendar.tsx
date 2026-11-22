@@ -222,7 +222,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
               value={displayYear}
               options={yearOptions}
               onChange={setSelectedYear}
-              className="w-[132px]"
+              className="w-[112px]"
             />
           </div>
           <h2

@@ -75,10 +75,10 @@ export const YearSelect: React.FC<YearSelectProps> = ({
 
       {open && (
         <div
-          className="absolute left-0 top-[calc(100%+4px)] z-50 w-full overflow-y-auto rounded-[8px] border bg-white p-1 shadow-[0_8px_20px_rgba(17,17,17,0.12)]"
+          className="absolute left-0 top-[calc(100%+3px)] z-50 w-full overflow-y-auto border bg-white p-0 shadow-[0_6px_14px_rgba(17,17,17,0.1)]"
           style={{
             borderColor: PANEL_BORDER,
-            maxHeight: 5 * 32 + 8,
+            maxHeight: 5 * 28,
             overscrollBehavior: 'contain',
           }}
           role="listbox"
@@ -92,12 +92,12 @@ export const YearSelect: React.FC<YearSelectProps> = ({
                 type="button"
                 role="option"
                 aria-selected={selected}
-                className="flex min-h-8 w-full items-center justify-between rounded-[6px] border border-transparent px-2.5 py-1 text-left transition-colors hover:bg-[#f7f4ee] focus-visible:bg-[#f7f4ee] focus-visible:outline-none"
+                className="flex min-h-7 w-full items-center justify-between border-0 px-2 py-1 text-left transition-colors hover:bg-[#f7f4ee] focus-visible:bg-[#f7f4ee] focus-visible:outline-none"
                 style={{
                   fontFamily: COMFORTAA_FONT,
                   fontSize: 12,
                   color: '#111',
-                  backgroundColor: 'white',
+                  backgroundColor: selected ? '#e9e7e4' : 'white',
                 }}
                 onClick={() => {
                   onChange(option);
@@ -105,7 +105,6 @@ export const YearSelect: React.FC<YearSelectProps> = ({
                 }}
               >
                 <span>{option}</span>
-                {selected && <span aria-hidden>✓</span>}
               </button>
             );
           })}
