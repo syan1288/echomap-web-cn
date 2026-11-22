@@ -121,6 +121,12 @@ const IconChevronRight: React.FC = () => (
   </svg>
 );
 
+const IconChevronLeft: React.FC = () => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="m15 18-6-6 6-6" />
+  </svg>
+);
+
 const IconEdit: React.FC = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M12 20h9" />
@@ -654,10 +660,13 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                   className="mb-1 border-0 bg-transparent p-0 text-[11px] text-[#666] hover:text-[#0053D4]"
                   aria-label={t('authBack')}
                 >
-                  ‹
+                  <IconChevronLeft />
                 </button>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[12px] font-semibold">{currentPlanName}</span>
+                  {currentPlanId === 'free' && (
+                    <span className="shrink-0 text-[11px] font-semibold text-[#555]">¥0</span>
+                  )}
                 </div>
                 <div className="text-[10.5px] leading-[1.4] text-[#666]">{currentPlanDetail}</div>
               </div>
@@ -671,7 +680,7 @@ export const EchoSidebar: React.FC<EchoSidebarProps> = ({
                   className="mx-2 mb-1 border-0 bg-transparent p-0 text-[11px] text-[#666] hover:text-[#0053D4]"
                   aria-label={t('authBack')}
                 >
-                  ‹
+                  <IconChevronLeft />
                 </button>
                 {paymentPlansLoading && (
                   <div className="px-2 py-1 text-[10.5px] text-[#666]">{t('balancePlansLoading')}</div>

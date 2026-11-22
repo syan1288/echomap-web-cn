@@ -270,11 +270,16 @@ export const VersionPlanModal: React.FC<VersionPlanModalProps> = ({ onClose, tit
           <div className="rounded-[8px] border border-gray-200 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
               <span className="font-bold text-[#333]">{currentPlanName}</span>
-              <span className="text-[13px] text-[#555]">
-                {balance
-                  ? t('balanceGenerationsRemaining', { count: balance.remainingGenerations })
-                  : '—'}
-              </span>
+              <div className="flex shrink-0 items-center gap-3">
+                {currentPlanId === 'free' && (
+                  <span className="text-[14px] font-bold text-[#555]">¥0</span>
+                )}
+                <span className="text-[13px] text-[#555]">
+                  {balance
+                    ? t('balanceGenerationsRemaining', { count: balance.remainingGenerations })
+                    : '—'}
+                </span>
+              </div>
             </div>
             <p className="mb-0 mt-2 text-[13px] leading-[1.45] text-[#666]">
               {currentPlanId === 'free'
