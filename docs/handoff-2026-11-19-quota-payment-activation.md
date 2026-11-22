@@ -5,6 +5,8 @@
 生产分支：`main`  
 生产地址：<https://echomap.syan12.cn>
 
+> 历史快照：本文档记录 2026-11-19 的实施过程。文中旧价格、旧额度和旧提交号不代表当前生产配置；当前唯一依据是 [`docs/project-handoff-2026-11-22.md`](project-handoff-2026-11-22.md)、`main` 和 Vercel Production 环境变量。
+
 ## 本次已完成
 
 - 建筑 Gallery 详情面板右下角 `> Go to memories` 已改为和左上角 `&lt; Back to gallery` 一致的灰色文字。
@@ -263,8 +265,8 @@ Content-Type: application/json
 
 - [ ] `GET /api/payments/create-order` 能看到已启用套餐。
 - [ ] 未登录用户不能创建订单。
-- [ ] Plus 订单金额和额度正确：默认 ¥5 / 20 次。
-- [ ] Pro 订单金额和额度正确：默认 ¥12.9 / 60 次。
+- [ ] Plus 订单金额和额度正确：当前应为 ¥5.9 / 20 次。
+- [ ] Pro 订单金额和额度正确：当前应为 ¥11.9 / 40 次。
 - [ ] 同一订单重复确认不会重复发额度。
 - [ ] 错误金额不能确认订单。
 - [ ] 微信回调签名错误不能发额度。

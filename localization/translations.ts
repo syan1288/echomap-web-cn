@@ -150,8 +150,8 @@ export const translations: { [key: string]: { [lang in Language]: string } } = {
   helpPlanPlusName: { en: 'Plus', zh: 'Plus 版' },
   helpPlanPlusPrice: { en: '¥5.9 / package', zh: '¥5.9 / 次数包' },
   helpPlanPlusDetail: {
-    en: '20 image generations per month. 100 saved landmarks and 1,000 photos.',
-    zh: '每月 20 次生图。100 个 saved landmark，1,000 张照片。',
+    en: 'One-time package with 20 image generations. 100 saved landmarks and 1,000 photos.',
+    zh: '一次性 20 次生图额度包。100 个 saved landmark，1,000 张照片。',
   },
   helpPlanProName: { en: 'Pro', zh: 'Pro 版' },
   helpPlanProPrice: { en: '¥11.9 / package', zh: '¥11.9 / 次数包' },

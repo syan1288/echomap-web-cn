@@ -7,19 +7,34 @@
 
 ## 0. 当前快照
 
+### 0.1 迁移时首先查看哪些文件
+
+以下内容都已经在 GitHub `main` 中，换电脑时从仓库重新 clone 即可：
+
+| 内容 | 查看位置 |
+| --- | --- |
+| 当前源码 | `App.tsx`、`index.tsx`、`components/`、`mobile/`、`web/`、`context/`、`services/`、`server/`、`api/`、`shared/`、`lib/`、`prompts/`、`localization/` |
+| Supabase SQL | `supabase/001_schema.sql` 至 `supabase/005_balance_and_purchased_plan.sql` |
+| 交接和部署文档 | `docs/`，当前主文档是 `docs/project-handoff-2026-11-22.md` |
+| 测试 | `tests/`、`server/*.test.ts`、`shared/**/*.test.ts`、`lib/*.test.ts` |
+| 依赖锁文件 | `package-lock.json`；依赖声明在 `package.json` |
+| 部署配置 | `vercel.json`、`vite.config.ts`、`deploy/`、`.env.example` |
+
+不要迁移 `node_modules/`、`dist/`、`.DS_Store` 或任何 `.env`/Secret 文件；新电脑执行 `npm ci` 和 `npx vercel env pull` 即可恢复运行环境。
+
 ### 当前代码状态
 
 | 项目 | 当前值 |
 | --- | --- |
 | 工作区 | `/Users/athena.xu/.codex/worktrees/legal-policy-pages/echomap-web-cn` |
-| 当前工作分支 | `codex/legal-policy-pages` |
-| 当前 HEAD | `62325c8 feat: style year selector with scrollable options` |
-| `origin/main` | `62325c8` |
+| 当前工作分支 | `main` |
+| 当前 HEAD | `7cdfbb3 docs: record production quota configuration` |
+| `origin/main` | `7cdfbb3` |
 | 工作区状态 | 干净 |
 | GitHub 远端 | `git@github.com:syan1288/echomap-web-cn.git` |
 | GitHub HTTPS | `https://github.com/syan1288/echomap-web-cn` |
 
-当前工作区分支名不是 `main`，但它与 `origin/main` 指向同一个提交。新电脑开始工作前，先执行：
+当前本地 `main` 与 `origin/main` 已同步。新电脑开始工作前，先执行：
 
 ```bash
 git fetch origin
@@ -36,8 +51,9 @@ git rev-parse HEAD origin/main
 | Vercel 项目 | `echo-map` |
 | Vercel Project ID | `prj_npSfrF4Aw8Cv4axcgylC24j1a4pD` |
 | Vercel Team ID | `team_J2DAHL8pq37Ep6qVpsda5NzL` |
-| 最新已知 Production Deployment | `dpl_87cgnDGxs9qYtcgVxk2Eemkjndwa` |
+| 最新已知 Production Deployment | `dpl_HjADqY8VvsWYTjorM7UWoRVeRHfS` |
 | Deployment 状态 | `READY` |
+| Deployment URL | `https://echo-mf4wv8vuw-syan1288s-projects.vercel.app` |
 | Vercel 默认域名 | `https://echo-map-phi.vercel.app` |
 | Vercel 项目默认别名 | `https://echo-map-syan1288s-projects.vercel.app` |
 | 部署命令 | `npx vercel --prod --yes` |
@@ -83,8 +99,8 @@ npx vercel inspect <最新生产部署 URL>
 
 | 套餐 | 讨论中的价格 | 讨论中的额度 |
 | --- | ---: | ---: |
-| Plus | ¥5.9 | 20 次 |
-| Pro | ¥11.9 | 40 次 |
+| Plus | ¥5.9 | 20 次一次性额度 |
+| Pro | ¥11.9 | 40 次一次性额度 |
 
 真正生效的生产值仍以 Vercel Production 环境变量为准：
 
@@ -1503,9 +1519,9 @@ ECHO_PAYMENT_ORDERS_STORE
 ECHO_PAYMENT_PROVIDER
 ```
 
-已确认 `ECHO_ENTITLEMENTS_STORE=supabase`，生产额度数据走 Supabase。
+`ECHO_ENTITLEMENTS_STORE` 与 `ECHO_PAYMENT_ORDERS_STORE` 的目标生产值都是 `supabase`；此前已按此值配置。当前 Vercel 仍将两个变量标记为 Secret，`vercel env pull` 只返回 `[SENSITIVE]`，因此 CLI 不能独立证明当前明文值。换电脑后应在 Vercel Project Settings → Environment Variables 中查看变量的环境范围，并用一次真实的“创建订单 → 支付确认 → 额度增加”链路验证。
 
-`ECHO_PAYMENT_ORDERS_STORE` 和 `ECHO_PAYMENT_PROVIDER` 被 Vercel 标记为 Secret，CLI 拉取时只返回 `[SENSITIVE]`，因此无法从 CLI 读取原值。当前已将 `ECHO_PAYMENT_ORDERS_STORE` 重新写入为 `supabase`；`ECHO_PAYMENT_PROVIDER` 保留现状，需在 Vercel Project Settings → Environment Variables 中按实际收款渠道核对。
+`ECHO_PAYMENT_PROVIDER` 当前变量存在，但因同样被标记为 Secret，尚未从 CLI 完成明文核对。它必须与实际启用的支付渠道一致：`manual`、`wechat_native` 或 `alipay_page`。不能仅凭前端页面推断。
 
 `supabase/003_payment_orders_and_credit_ledger.sql` 的 Pro 默认参数也已从 60 改为 40。生产 Serverless 会把 Vercel 的 `ECHO_PRO_MONTHLY_GENERATIONS=40` 传给 RPC；如果希望数据库函数在脱离应用直接调用时也保持 40，需要在 Supabase SQL Editor 重新执行该迁移文件。
 
@@ -1534,15 +1550,13 @@ ECHO_PAYMENT_PROVIDER
 
 ### 16.7 当前本地 Git 分支风险
 
-当前状态：
+当前远端仅保留：
 
 ```text
-codex/legal-policy-pages = 62325c8
-origin/main              = 62325c8
-本地 main                = 96d55f8，落后 origin/main 68 个提交
+main
 ```
 
-换电脑后不要直接使用本地旧 `main` 判断项目是否最新。必须先执行：
+此前的 `backup/tencent-image-2026-11-15` 已确认是 `main` 的祖先备份，已删除。换电脑后仍然必须先执行：
 
 ```bash
 git fetch origin
@@ -1552,15 +1566,7 @@ git pull --ff-only origin main
 
 如果 `main` 有本地未提交或本地独有提交，先保存 patch 或建立备份分支，再处理同步。不要用 `git reset --hard` 直接覆盖，除非已经确认没有需要保留的本地工作。
 
-当前仓库还存在一些历史 worktree/分支，例如：
-
-```text
-codex/mobile-parity
-codex/auth-flow-production
-codex/otp-removal-quota-persistence
-```
-
-它们可能包含历史实验或旧版本流程，不应当在新电脑上默认合并。恢复产品工作以 `origin/main` 为准。
+旧的 detached worktree 只是本机工作目录，不是远端分支；新电脑不需要迁移。恢复产品工作以 `origin/main` 为准。
 
 ## 17. 恢复工作 Checklist
 
@@ -1605,4 +1611,4 @@ codex/otp-removal-quota-persistence
 6. 生产额度和支付必须使用 Supabase 数据库，不要使用 Serverless 本地 JSON 文件。
 7. Secret 不能靠 Git 找回；大多数情况是轮换后更新 Vercel、Supabase 或供应商控制台。
 8. 修改额度时要同时检查环境变量、Supabase RPC、服务端 fallback、页面文案和测试。
-9. 当前快照是 `62325c8`，生产别名是 `https://echomap.syan12.cn`。
+9. 当前快照是 `7cdfbb3`，生产别名是 `https://echomap.syan12.cn`。

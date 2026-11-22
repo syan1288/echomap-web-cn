@@ -222,7 +222,7 @@ VITE_MAPBOX_STYLE=mapbox://styles/mapbox/standard
 - 若 `OPENAI_BASE_URL=https://api.apimart.ai/v1`，后端会自动把同一个 `ChatGPT 图像 2.0` 入口切到 APIMart 的 `gpt-image-2` 异步任务流，默认固定 `size=1:1`、`resolution=1k`、`n=1`，图生图继续传 `image_urls`，并保留现有建筑风格 prompt。
 - 若前端和 API 分离部署，记得把这些 AI 环境变量配在独立 API 服务上，而不是只配在静态前端机器上。
 - Free 版本额度拦截在 `/api/generate` 服务端生效。前端会随生成请求发送 Supabase access token；服务端验证后按 `ECHO_FREE_STARTER_GENERATIONS` 和 `ECHO_FREE_MONTHLY_GENERATIONS` 扣减额度。
-- 当前默认额度存储是单机文件型，适合腾讯云 Lighthouse 验证期。`logs/entitlements.json` 不需要提前手动创建；第一次登录用户成功生成并扣额度后，服务端会按 `ECHO_ENTITLEMENTS_STORE_PATH` 自动创建/写入这个文件。正式扩容、多实例或自动支付开通前，设置 `ECHO_ENTITLEMENTS_STORE=supabase` 并使用 Supabase 表持久化；推荐表结构见 `docs/quota-persistence.md`。
+- `.env.example` 的 file store 仅用于本地单进程验证；正式 Vercel 生产必须使用 `ECHO_ENTITLEMENTS_STORE=supabase`，并将订单存储同时设为 `ECHO_PAYMENT_ORDERS_STORE=supabase`。生产不能把 `logs/entitlements.json` 或 `logs/payment-orders.json` 当作权威数据源；推荐表结构见 `docs/quota-persistence.md`。
 - `ECHO_PAYMENT_PROVIDER=manual` 时，支付只创建待人工确认订单：`/api/payments/create-order` 写入订单；付款核实后由管理员调用 `/api/payments/confirm-order` 确认。使用 Supabase store 时，确认会一并写入额度和授信流水。
 - `ECHO_PAYMENT_PROVIDER=wechat_native` 时，`/api/payments/create-order` 会向微信支付 Native 下单，微信支付成功后回调 `/api/payments/wechat/notify`；服务端验签、解密、核对金额后自动调用额度授信。配置步骤见 `docs/payment-automation-wechat.md`。
 - `ECHO_PAYMENT_PROVIDER=alipay_page` 时，`/api/payments/create-order` 返回由服务端生成的支付宝 POST 表单，成功通知发往 `/api/payments/alipay/notify`；用户回跳后，`/api/payments/status` 会按登录用户归属主动查单，只有验签、订单号和金额匹配后才自动发放额度。回跳参数本身不作为付款凭据。
