@@ -229,7 +229,7 @@ export const TravelHeatmapCalendar: React.FC<TravelHeatmapCalendarProps> = ({
                 value={displayYear}
                 onChange={(event) => setSelectedYear(Number(event.target.value))}
                 aria-label={t('galleryYear')}
-                className="cursor-pointer rounded-sm border border-[#c4bfb5] bg-[#F9F1E2] px-1.5 py-0.5 text-[#756F6C] outline-none transition-colors hover:border-[#8f9b6e] focus:border-[#5F6D3B]"
+                className="cursor-pointer border-0 bg-transparent px-0.5 py-0.5 text-[#756F6C] outline-none transition-colors focus:text-[#5F6D3B]"
                 style={{
                   fontFamily: COMFORTAA_FONT,
                   fontWeight: 400,

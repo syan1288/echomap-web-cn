@@ -205,7 +205,6 @@ export const GallerySection: React.FC<GallerySectionProps> = ({
   }, [buildings, query, dim]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / GALLERY_ITEMS_PER_PAGE) || 1);
-  const dotCount = totalPages + 1;
 
   useEffect(() => {
     setCarouselPage((p) => Math.min(p, Math.max(0, totalPages - 1)));
@@ -436,28 +435,19 @@ export const GallerySection: React.FC<GallerySectionProps> = ({
                 </svg>
               </button>
               <div className="flex items-center gap-4">
-                {Array.from({ length: dotCount }, (_, i) => {
-                  const isPageDot = i < totalPages;
-                  const isActivePage = isPageDot && carouselPage === i;
+                {Array.from({ length: totalPages }, (_, i) => {
+                  const isActivePage = carouselPage === i;
                   return (
                     <button
                       key={`dot-${i}`}
                       type="button"
+                      disabled={totalPages === 1}
                       aria-label={
-                        isPageDot
-                          ? `Page ${i + 1}`
-                          : carouselPage >= totalPages - 1
-                            ? t('galleryFirstPage')
-                            : t('galleryLastPage')
+                        `Page ${i + 1}`
                       }
                       aria-current={isActivePage ? 'true' : undefined}
-                      onClick={() => {
-                        if (isPageDot) setCarouselPage(i);
-                        else {
-                          setCarouselPage((p) => (p >= totalPages - 1 ? 0 : totalPages - 1));
-                        }
-                      }}
-                      className="h-2.5 w-2.5 shrink-0 rounded-full border transition-colors cursor-pointer"
+                      onClick={() => setCarouselPage(i)}
+                      className="h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border transition-colors disabled:cursor-default"
                       style={{
                         borderColor: CAROUSEL_DOT,
                         backgroundColor: isActivePage ? CAROUSEL_DOT : 'transparent',

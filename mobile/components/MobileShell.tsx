@@ -2736,7 +2736,7 @@ function HeatmapMini({
             value={selectedYear}
             onChange={(event) => setSelectedYear(Number(event.target.value))}
             aria-label={copy.year}
-            className="cursor-pointer rounded-sm border border-[#d7c9ad] bg-[#F9F1E2] px-1.5 py-0.5 text-[#6c655a] outline-none"
+            className="cursor-pointer border-0 bg-transparent px-0.5 py-0.5 text-[#6c655a] outline-none"
             style={{ fontFamily: COMFORTAA_FONT }}
           >
             {yearOptions.map((option) => (
